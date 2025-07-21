@@ -5,6 +5,8 @@ const contactSchema = new mongoose.Schema({
     email: { type: String, required: true },
     subject: { type: String, required: true },
     message: { type: String, required: true },
+    category: { type: String, enum: ['general', 'order', 'technical', 'feedback'], default: 'general' },
+    categoryLabel: { type: String, default: 'General Inquiry' },
     status: { type: String, enum: ['new', 'read', 'replied'], default: 'new' },
     ipAddress: { type: String },
     userAgent: { type: String },

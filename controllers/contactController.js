@@ -3,7 +3,7 @@ const Contact = require('../models/Contact');
 // Submit contact form (public endpoint)
 exports.submitContact = async(req, res) => {
     try {
-        const { name, email, subject, message } = req.body;
+        const { name, email, subject, message, category, categoryLabel } = req.body;
         
         // Validation
         if (!name || !email || !subject || !message) {
@@ -22,6 +22,8 @@ exports.submitContact = async(req, res) => {
             email,
             subject,
             message,
+            category: category || 'general', // Default to general if not provided
+            categoryLabel: categoryLabel || 'General Inquiry', // Store the human-readable label
             ipAddress: req.ip || req.connection.remoteAddress,
             userAgent: req.get('User-Agent')
         });

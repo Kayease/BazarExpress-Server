@@ -2,7 +2,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
-async function authMiddleware(req, res, next) {
+// Authentication middleware
+exports.isAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Authorization header missing or malformed.' });
@@ -18,6 +19,15 @@ async function authMiddleware(req, res, next) {
     } catch (err) {
         return res.status(401).json({ error: 'Invalid or expired token.' });
     }
-}
+};
 
-module.exports = authMiddleware;
+// Admin authorization middleware
+exports.isAdmin = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+};

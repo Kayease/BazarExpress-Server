@@ -18,6 +18,7 @@ const bannerRoutes = require("./routes/bannerRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const blogRoutes = require("./routes/blogRoutes");
 const noticeRoutes = require("./routes/noticeRoutes");
+const newsletterRoutes = require("./routes/newsletterRoutes");
 const noticeController = require("./controllers/noticeController");
 
 const app = express();
@@ -49,6 +50,7 @@ app.use("/api/banners", bannerRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/notices", noticeRoutes);
+app.use("/api/newsletter", newsletterRoutes);
 
 // Global error handler
 app.use(errorHandler);
