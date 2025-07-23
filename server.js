@@ -59,9 +59,7 @@ app.use(errorHandler);
 async function runAutoActivation() {
     try {
         await noticeController.autoActivateNotices();
-        console.log('Daily auto-activation completed at:', new Date().toLocaleString());
     } catch (err) {
-        console.error('Auto-activation error:', err);
     }
 }
 
@@ -80,24 +78,19 @@ function scheduleDailyAutoActivation() {
         setInterval(runAutoActivation, 24 * 60 * 60 * 1000);
     }, timeUntilMidnight);
     
-    console.log(`Auto-activation scheduled for 12:00 AM daily. Next run in ${Math.round(timeUntilMidnight / (1000 * 60))} minutes`);
 }
 
 // Connect to MongoDB and start server
 async function startServer() {
     try {
         await mongoose.connect(MONGODB_URI);
-        console.log("MongoDB connected successfully");
-        
         // Run auto-activation on server start
         await runAutoActivation();
-        console.log("Initial notice auto-activation completed");
-        
         // Schedule daily auto-activation at 12:00 AM
         scheduleDailyAutoActivation();
         
         app.listen(port, () => {
-            console.log(`Server is running on port ${port}`);
+            console.log('Server started successfully');
         });
     } catch (err) {
         console.error("MongoDB connection error:", err);

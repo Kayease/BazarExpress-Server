@@ -57,16 +57,14 @@ async function updateProfile(req, res, next) {
             return res.status(401).json({ error: 'Unauthorized: user not found in request.' });
         }
         const userId = req.user._id || req.user.id;
-        const { name, phone, dateOfBirth, address } = req.body;
-        console.log('updateProfile - incoming body:', req.body);
+        const { name, email, phone, dateOfBirth, address } = req.body;
         const update = {};
         if (name) update.name = name;
+        if (email) update.email = email;
         if (phone) update.phone = phone;
         if (dateOfBirth) update.dateOfBirth = dateOfBirth;
         if (address) update.address = address;
-        console.log('updateProfile - update object:', update);
         const user = await User.findByIdAndUpdate(userId, update, { new: true });
-        console.log('updateProfile - updated user:', user);
         res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, dateOfBirth: user.dateOfBirth, address: user.address || null, status: user.status } });
     } catch (err) {
         next(err);
@@ -149,7 +147,6 @@ async function updateUserByAdmin(req, res, next) {
         }
         const userId = req.params.id;
         const { name, email, phone, dateOfBirth, address, role, status } = req.body;
-        console.log('updateUserByAdmin - incoming body:', req.body);
         const update = {};
         if (name) update.name = name;
         if (email) update.email = email;
@@ -158,9 +155,7 @@ async function updateUserByAdmin(req, res, next) {
         if (address) update.address = address;
         if (role && ['admin', 'user'].includes(role)) update.role = role;
         if (status && ['active', 'disabled'].includes(status)) update.status = status;
-        console.log('updateUserByAdmin - update object:', update);
         const user = await User.findByIdAndUpdate(userId, update, { new: true });
-        console.log('updateUserByAdmin - updated user:', user);
         if (!user) return res.status(404).json({ error: 'User not found' });
         res.json({
             id: user._id,
@@ -177,4 +172,23 @@ async function updateUserByAdmin(req, res, next) {
     }
 }
 
-module.exports = { register, login, updateProfile, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin };
+async function getProfile(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const user = req.user;
+  res.json({
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      dateOfBirth: user.dateOfBirth,
+      address: user.address || null,
+      status: user.status
+    }
+  });
+}
+
+module.exports = { register, login, updateProfile, getProfile, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin };

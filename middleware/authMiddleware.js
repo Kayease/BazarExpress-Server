@@ -11,12 +11,15 @@ exports.isAuth = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
+        // Verify the token and get user data
         // Use Mongoose to find the user
         const user = await User.findById(decoded.id);
+        // Add user to request object
         if (!user) return res.status(401).json({ error: 'User not found' });
         req.user = user; // Attach full user object, including role
         next();
     } catch (err) {
+        // Handle JWT verification errors
         return res.status(401).json({ error: 'Invalid or expired token.' });
     }
 };

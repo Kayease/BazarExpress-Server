@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    name: { type: String, required: false, default: "" },
+    email: { type: String, required: false, unique: true, sparse: true },
+    password: { type: String, required: false, default: "" },
     role: { type: String, default: 'user' },
     phone: { type: String, default: '' },
     dateOfBirth: { type: String, default: '' },
@@ -20,16 +20,20 @@ const userSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
 });
 
-userSchema.statics.createUser = async function({ name, email, password, role = 'user', phone = '', dateOfBirth = '' }) {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new this({
+userSchema.statics.createUser = async function({ name = '', email = '', password = '', role = 'user', phone = '', dateOfBirth = '' }) {
+    let hashedPassword = '';
+    if (password) {
+        hashedPassword = await bcrypt.hash(password, 10);
+    }
+    const userData = {
         name,
-        email,
-        password: hashedPassword,
         role,
         phone,
         dateOfBirth
-    });
+    };
+    if (email) userData.email = email;
+    if (password) userData.password = hashedPassword;
+    const user = new this(userData);
     return user.save();
 };
 

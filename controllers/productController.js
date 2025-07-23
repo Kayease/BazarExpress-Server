@@ -76,13 +76,13 @@ function extractPublicIdFromUrl(url) {
   // Match /upload/v123456789/products/abc/filename.jpg
   const match = url.match(/\/upload\/v\d+\/(.+)\.[a-zA-Z0-9]+$/);
   const publicId = match ? match[1] : null;
-  console.log('Extracted public_id:', publicId, 'from url:', url);
+  // Extract public_id from Cloudinary URL
   return publicId;
 }
 
 exports.createProduct = async(req, res) => {
     try {
-        console.log("Received body:", req.body);
+        // Process received product data
         let { image, category, sku } = req.body;
         let imageUrl = image;
         // Get category slug for folder structure
@@ -165,7 +165,7 @@ exports.deleteProduct = async(req, res) => {
         let mainImagePublicId = product.image && product.image.public_id ? product.image.public_id : extractPublicIdFromUrl(product.image);
         if (mainImagePublicId) {
             const result = await cloudinary.uploader.destroy(mainImagePublicId);
-            console.log('Deleting from Cloudinary:', mainImagePublicId, 'Result:', result);
+            // Delete main image from Cloudinary
         }
         // Delete gallery images
         if (Array.isArray(product.galleryImages)) {
