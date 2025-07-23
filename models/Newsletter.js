@@ -30,7 +30,6 @@ const newsletterSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Add index for better query performance
-newsletterSchema.index({ email: 1 });
 newsletterSchema.index({ isSubscribed: 1 });
 
 module.exports = mongoose.model('Newsletter', newsletterSchema); 
