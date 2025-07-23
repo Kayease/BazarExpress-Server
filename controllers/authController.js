@@ -3,23 +3,23 @@ const User = require('../models/User');
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 function generateToken(user) {
-    return jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    return jwt.sign({ id: user._id, phone: user.phone }, JWT_SECRET, { expiresIn: '7d' });
 }
 
 async function register(req, res, next) {
     try {
-        const { name, email, password, phone = '', dateOfBirth = '' } = req.body;
-        if (!name || !email || !password) {
-            return res.status(400).json({ error: 'Name, email, and password are required.' });
+        const { name, email = '', phone, dateOfBirth = '' } = req.body;
+        if (!name || !phone || !/^\d{10}$/.test(phone)) {
+            return res.status(400).json({ error: 'Name and valid phone number are required.' });
         }
-        if (password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        
+        // Check for existing user by phone number
+        const existingByPhone = await User.findOne({ phone });
+        if (existingByPhone) {
+            return res.status(409).json({ error: 'Phone number already registered.' });
         }
-        const existing = await User.findUserByEmail(email);
-        if (existing) {
-            return res.status(409).json({ error: 'Email already registered.' });
-        }
-        const user = await User.createUser({ name, email, password, phone, dateOfBirth });
+        
+        const user = await User.createUser({ name, email, phone, dateOfBirth });
         const token = generateToken(user);
         res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, dateOfBirth: user.dateOfBirth } });
     } catch (err) {
@@ -29,23 +29,16 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
     try {
-        const { email, password } = req.body;
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required.' });
+        const { phone } = req.body;
+        if (!phone || !/^\d{10}$/.test(phone)) {
+            return res.status(400).json({ error: 'Valid phone number is required.' });
         }
-        const user = await User.findUserByEmail(email);
-        if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-        if (user.status && user.status !== 'active') {
-            return res.status(403).json({ error: 'Your account is disabled. Please contact support.' });
-        }
-        const valid = await user.validatePassword(password);
-        if (!valid) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-        const token = generateToken(user);
-        res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, dateOfBirth: user.dateOfBirth, address: user.address || null, status: user.status } });
+        
+        // Phone-based authentication - redirecting to OTP flow
+        return res.status(400).json({ 
+            error: 'Direct login not supported', 
+            message: 'Please use OTP-based authentication via /auth/send-otp endpoint' 
+        });
     } catch (err) {
         next(err);
     }
@@ -76,7 +69,7 @@ async function getAllUsers(req, res, next) {
         if (!req.user || req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Forbidden' });
         }
-        const users = await User.find({}, { password: 0 });
+        const users = await User.find({});
         res.json(users.map(u => ({
             id: u._id,
             name: u.name,

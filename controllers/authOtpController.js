@@ -19,7 +19,7 @@ function generateOtp() {
 
 function generateToken(user) {
   return jwt.sign(
-    { id: user._id, email: user.email }, // use 'id', not '_id'
+    { id: user._id, phone: user.phone }, // use phone instead of email
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -57,10 +57,9 @@ exports.verifyOtp = async (req, res) => {
     user = await User.create({
       name: '',
       email: '',
-      password: '',
       phone,
       dateOfBirth: '',
-      address: {},
+      address: [],
       role: 'user',
       status: 'active',
     });

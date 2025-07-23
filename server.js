@@ -7,6 +7,7 @@ const fetch = require('node-fetch');
 
 // Import routes
 const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const warehouseRoutes = require("./routes/warehouseRoutes");
 const errorHandler = require("./middleware/errorHandler");
@@ -40,6 +41,7 @@ app.get("/", (req, res) => {
 
 // API routes
 app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/brands", brandsRouter);

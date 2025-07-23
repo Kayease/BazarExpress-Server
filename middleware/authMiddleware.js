@@ -12,8 +12,17 @@ exports.isAuth = async (req, res, next) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         // Verify the token and get user data
-        // Use Mongoose to find the user
+        // Use Mongoose to find the user by ID
         const user = await User.findById(decoded.id);
+        
+        // If user not found by ID but phone is available in token, try finding by phone
+        if (!user && decoded.phone) {
+            const userByPhone = await User.findUserByPhone(decoded.phone);
+            if (userByPhone) {
+                req.user = userByPhone;
+                return next();
+            }
+        }
         // Add user to request object
         if (!user) return res.status(401).json({ error: 'User not found' });
         req.user = user; // Attach full user object, including role

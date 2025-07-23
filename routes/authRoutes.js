@@ -1,12 +1,11 @@
 const express = require('express');
-const { register, login, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin } = require('../controllers/authController');
+const { register, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin } = require('../controllers/authController');
 const { isAuth, isAdmin } = require('../middleware/authMiddleware');
 const { sendOtp, verifyOtp } = require('../controllers/authOtpController');
 
 const router = express.Router();
 
 router.post('/register', register);
-router.post('/login', login);
 router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
 router.put('/profile', isAuth, require('../controllers/authController').updateProfile);
