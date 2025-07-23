@@ -103,13 +103,22 @@ exports.updateAddress = async (req, res) => {
       );
     }
 
-    // Update the address in the array
-    // Try both string and number versions of addressId
-    const result = await User.updateOne(
-      { _id: userId, $or: [{ "address.id": addressId }, { "address.id": Number(addressId) }, { "address.id": String(addressId) }] },
-      { $set: { "address.$[addr]": { ...updateData, id: addressId } } },
-      { arrayFilters: [{ $or: [{ "addr.id": addressId }, { "addr.id": Number(addressId) }, { "addr.id": String(addressId) }] }] }
-    );
+    let result;
+    if (Object.keys(updateData).length === 1 && Object.prototype.hasOwnProperty.call(updateData, 'isDefault')) {
+      // Only update isDefault field
+      result = await User.updateOne(
+        { _id: userId, $or: [{ "address.id": addressId }, { "address.id": Number(addressId) }, { "address.id": String(addressId) }] },
+        { $set: { "address.$[addr].isDefault": updateData.isDefault, "address.$[addr].updatedAt": Date.now() } },
+        { arrayFilters: [{ $or: [{ "addr.id": addressId }, { "addr.id": Number(addressId) }, { "addr.id": String(addressId) }] }] }
+      );
+    } else {
+      // Update the address in the array (full update)
+      result = await User.updateOne(
+        { _id: userId, $or: [{ "address.id": addressId }, { "address.id": Number(addressId) }, { "address.id": String(addressId) }] },
+        { $set: { "address.$[addr]": { ...updateData, id: addressId } } },
+        { arrayFilters: [{ $or: [{ "addr.id": addressId }, { "addr.id": Number(addressId) }, { "addr.id": String(addressId) }] }] }
+      );
+    }
 
     console.log('Update result:', {
       matchedCount: result.matchedCount,
@@ -187,6 +196,44 @@ exports.deleteAddress = async (req, res) => {
     res.json({ success: true, message: 'Address deleted successfully' });
   } catch (err) {
     console.error('Error in deleteAddress:', err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+// Reset all default addresses for a user
+exports.resetDefaultAddresses = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const userId = req.user._id || req.user.id;
+    
+    console.log('Reset default addresses request for user:', userId);
+
+    // Update all addresses to set isDefault to false
+    const result = await User.updateOne(
+      { _id: userId },
+      { $set: { "address.$[elem].isDefault": false } },
+      { arrayFilters: [{ "elem.isDefault": true }] }
+    );
+
+    console.log('Reset default addresses result:', {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount
+    });
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'All default addresses have been reset',
+      modifiedCount: result.modifiedCount
+    });
+  } catch (err) {
+    console.error('Error in resetDefaultAddresses:', err);
     res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
