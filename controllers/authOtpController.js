@@ -4,10 +4,11 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 // Hardcoded SMS Gateway config (for debugging, as requested)
-const SMS_API_KEY = 'zZiAw1PEZkqRoZohCN6BmQQQQ';
-const SENDER_ID = 'HTLWEB';
-const ENTITY_ID = '1301159617684462118';
-const TEMPLATE_ID = '1307162486161207976';
+const SMS_API_KEY = process.env.SMS_API_KEY;
+const SENDER_ID = process.env.SENDER_ID;
+const ENTITY_ID = process.env.ENTITY_ID;
+const TEMPLATE_ID = process.env.TEMPLATE_ID; // Use env var or default for testing
+// JWT secret for signing tokens
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 const otpStore = {};
