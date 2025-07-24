@@ -32,8 +32,8 @@ exports.addAddress = async (req, res) => {
     const addressData = req.body;
     
     // Required fields validation
-    if (!addressData.type || !addressData.building || !addressData.area || !addressData.city || !addressData.state || !addressData.pincode) {
-      return res.status(400).json({ error: 'Missing required address fields' });
+    if (!addressData.type || (!addressData.building && !addressData.area) || !addressData.city || !addressData.state || !addressData.pincode) {
+      return res.status(400).json({ error: 'Missing required address fields (type, building or area, city, state, pincode)' });
     }
 
     // Add timestamps and set isActive
@@ -96,16 +96,33 @@ exports.updateAddress = async (req, res) => {
 
     // If setting as default, unset any existing default addresses
     if (updateData.isDefault) {
-      await User.updateOne(
-        { _id: userId, "address.isDefault": true, "address.id": { $ne: addressId } },
-        { $set: { "address.$[elem].isDefault": false } },
-        { arrayFilters: [{ "elem.isDefault": true }] }
-      );
+      console.log('Unsetting other default addresses for user:', userId, 'excluding address:', addressId);
+      try {
+        const resetResult = await User.updateOne(
+          { _id: userId },
+          { $set: { "address.$[elem].isDefault": false, "address.$[elem].updatedAt": Date.now() } },
+          { 
+            arrayFilters: [{ 
+              "elem.isDefault": true,
+              "elem.id": { 
+                $nin: [addressId, Number(addressId), String(addressId)]
+              }
+            }] 
+          }
+        );
+        console.log('Reset other defaults result:', resetResult);
+      } catch (resetError) {
+        console.error('Error resetting other default addresses:', resetError);
+        // Continue with the update even if reset fails
+      }
     }
 
     let result;
+    console.log('Attempting to update address with ID:', addressId, 'Type:', typeof addressId);
+    
     if (Object.keys(updateData).length === 1 && Object.prototype.hasOwnProperty.call(updateData, 'isDefault')) {
       // Only update isDefault field
+      console.log('Updating only isDefault field');
       result = await User.updateOne(
         { _id: userId, $or: [{ "address.id": addressId }, { "address.id": Number(addressId) }, { "address.id": String(addressId) }] },
         { $set: { "address.$[addr].isDefault": updateData.isDefault, "address.$[addr].updatedAt": Date.now() } },
@@ -113,6 +130,7 @@ exports.updateAddress = async (req, res) => {
       );
     } else {
       // Update the address in the array (full update)
+      console.log('Performing full address update');
       result = await User.updateOne(
         { _id: userId, $or: [{ "address.id": addressId }, { "address.id": Number(addressId) }, { "address.id": String(addressId) }] },
         { $set: { "address.$[addr]": { ...updateData, id: addressId } } },
@@ -129,8 +147,12 @@ exports.updateAddress = async (req, res) => {
       console.log('Address not found with ID:', addressId);
       // Let's check what addresses exist
       const user = await User.findById(userId);
-      console.log('User addresses:', user.address.map(addr => ({ id: addr.id, type: addr.type })));
-      return res.status(404).json({ error: 'Address not found' });
+      if (user && user.address) {
+        console.log('User addresses:', user.address.map(addr => ({ id: addr.id, type: addr.type })));
+      } else {
+        console.log('User has no addresses or user not found');
+      }
+      return res.status(404).json({ error: `Address not found with ID: ${addressId}` });
     }
 
     // Get the updated user to return the current address
@@ -142,7 +164,12 @@ exports.updateAddress = async (req, res) => {
     console.log('Updated address:', updatedAddress);
     res.json({ address: updatedAddress });
   } catch (err) {
-    res.status(500).json({ error: 'Server error', details: err.message });
+    console.error('Error in updateAddress:', err);
+    res.status(500).json({ 
+      error: 'Server error', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 };
 
@@ -246,7 +273,7 @@ exports.setDefaultAddress = async (req, res) => {
     }
 
     const userId = req.user._id || req.user.id;
-    const { addressId } = req.params;
+    const addressId = req.params.addressId || req.query.id;
 
     // First, unset any existing default addresses
     await User.updateOne(
