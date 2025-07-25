@@ -131,6 +131,32 @@ exports.getProducts = async (req, res) => {
     }
 };
 
+// Paginated and searchable products endpoint
+exports.getProductsPaginated = async (req, res) => {
+    try {
+        const { search = '', page = 1, limit = 20 } = req.query;
+        const query = {};
+        if (search) {
+            query.name = { $regex: search, $options: 'i' };
+        }
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const products = await Product.find(query)
+            .populate('brand')
+            .populate('category')
+            .skip(skip)
+            .limit(parseInt(limit));
+        const total = await Product.countDocuments(query);
+        res.json({
+            products,
+            total,
+            page: parseInt(page),
+            totalPages: Math.ceil(total / parseInt(limit)),
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
 exports.getProductById = async(req, res) => {
     try {
         const product = await Product.findById(req.params.id)

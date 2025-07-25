@@ -4,6 +4,7 @@ const categoryController = require('../controllers/categoryController');
 
 router.get('/', categoryController.getCategories);
 router.get('/subcategories/:parentId', categoryController.getSubcategoriesByParent);
+router.get('/paginated', categoryController.getCategoriesPaginated);
 router.post('/', categoryController.createCategory);
 router.put('/:id', categoryController.updateCategory);
 router.delete('/:id', categoryController.deleteCategory);

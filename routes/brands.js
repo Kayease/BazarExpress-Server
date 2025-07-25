@@ -141,5 +141,6 @@ router.delete("/:id", async(req, res) => {
 });
 
 router.post('/delete-image', brandsController.deleteBrandImage);
+router.get('/paginated', brandsController.getBrandsPaginated);
 
 module.exports = router;

@@ -151,10 +151,35 @@ async function getSubcategoriesByParent(req, res) {
     }
 }
 
+// Paginated and searchable categories endpoint
+async function getCategoriesPaginated(req, res) {
+  try {
+    const { search = '', page = 1, limit = 20 } = req.query;
+    const baseParentFilter = { $or: [{ parentId: { $exists: false } }, { parentId: '' }, { parentId: null }] };
+    const query = search
+      ? { ...baseParentFilter, name: { $regex: search, $options: 'i' } }
+      : baseParentFilter;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [items, total] = await Promise.all([
+      Category.find(query)
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Category.countDocuments(query)
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    res.json({ items, totalPages });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
 module.exports = {
     getCategories,
     createCategory,
     updateCategory,
     deleteCategory,
-    getSubcategoriesByParent
+    getSubcategoriesByParent,
+    getCategoriesPaginated
 };

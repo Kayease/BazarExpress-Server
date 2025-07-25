@@ -5,6 +5,7 @@ exports.getAllPromocodes = async(req, res) => {
     try {
         const promocodes = await Promocode.find()
             .populate('categories', 'name')
+            .populate('brands', 'name')
             .populate('products', 'name');
         res.json(promocodes);
     } catch (err) {
@@ -17,6 +18,7 @@ exports.getPromocode = async(req, res) => {
     try {
         const promocode = await Promocode.findById(req.params.id)
             .populate('categories', 'name')
+            .populate('brands', 'name')
             .populate('products', 'name');
         if (!promocode) return res.status(404).json({ error: 'Promocode not found' });
         res.json(promocode);

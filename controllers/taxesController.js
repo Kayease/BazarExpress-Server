@@ -1,4 +1,5 @@
 const Tax = require('../models/Tax');
+const Product = require('../models/Product');
 
 // Get all taxes
 exports.getAllTaxes = async(req, res) => {
@@ -46,6 +47,11 @@ exports.updateTax = async(req, res) => {
 // Delete a tax by ID
 exports.deleteTax = async(req, res) => {
     try {
+        // Check if any product uses this tax
+        const productUsingTax = await Product.findOne({ tax: req.params.id });
+        if (productUsingTax) {
+            return res.status(400).json({ error: 'Cannot delete tax: It is used by one or more products.' });
+        }
         const tax = await Tax.findByIdAndDelete(req.params.id);
         if (!tax) return res.status(404).json({ error: 'Tax not found' });
         res.json({ message: 'Tax deleted' });
