@@ -20,6 +20,7 @@ const contactRoutes = require("./routes/contactRoutes");
 const blogRoutes = require("./routes/blogRoutes");
 const noticeRoutes = require("./routes/noticeRoutes");
 const newsletterRoutes = require("./routes/newsletterRoutes");
+const deliveryRoutes = require("./routes/deliveryRoutes");
 const noticeController = require("./controllers/noticeController");
 
 const app = express();
@@ -53,6 +54,7 @@ app.use("/api/contacts", contactRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/delivery", deliveryRoutes);
 
 // Global error handler
 app.use(errorHandler);

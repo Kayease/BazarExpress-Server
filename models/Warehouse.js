@@ -11,6 +11,33 @@ const warehouseSchema = new mongoose.Schema({
     email: { type: String },
     capacity: { type: Number },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    
+    // Delivery settings for this warehouse
+    deliverySettings: {
+        maxDeliveryRadius: { 
+            type: Number, 
+            default: 50, // Maximum delivery radius in km
+            min: 0 
+        },
+        freeDeliveryRadius: { 
+            type: Number, 
+            default: 3, // Free delivery radius in km
+            min: 0 
+        },
+        isDeliveryEnabled: { 
+            type: Boolean, 
+            default: true 
+        },
+        deliveryDays: [{
+            type: String,
+            enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        }],
+        deliveryHours: {
+            start: { type: String, default: '09:00' }, // 24-hour format
+            end: { type: String, default: '21:00' }
+        }
+    },
+    
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
@@ -43,5 +70,59 @@ warehouseSchema.statics.updateWarehouse = function(id, updates) {
 warehouseSchema.statics.deleteWarehouse = function(id) {
     return this.findByIdAndDelete(id);
 };
+
+// Find the best warehouse for delivery to a specific location
+warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLat, customerLng) {
+    const warehouses = await this.find({ 
+        status: 'active',
+        'deliverySettings.isDeliveryEnabled': true,
+        'location.lat': { $exists: true },
+        'location.lng': { $exists: true }
+    });
+    
+    if (warehouses.length === 0) {
+        return null;
+    }
+    
+    // Calculate distance to each warehouse and filter by delivery radius
+    const availableWarehouses = warehouses.map(warehouse => {
+        const distance = calculateDistance(
+            warehouse.location.lat,
+            warehouse.location.lng,
+            customerLat,
+            customerLng
+        );
+        
+        return {
+            warehouse,
+            distance,
+            canDeliver: distance <= warehouse.deliverySettings.maxDeliveryRadius
+        };
+    }).filter(item => item.canDeliver);
+    
+    if (availableWarehouses.length === 0) {
+        return null;
+    }
+    
+    // Return the closest warehouse
+    availableWarehouses.sort((a, b) => a.distance - b.distance);
+    return {
+        warehouse: availableWarehouses[0].warehouse,
+        distance: availableWarehouses[0].distance
+    };
+};
+
+// Helper function for distance calculation
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
 
 module.exports = mongoose.model('Warehouse', warehouseSchema);

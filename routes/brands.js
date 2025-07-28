@@ -67,6 +67,9 @@ router.get("/", async(req, res) => {
     }
 });
 
+// GET /brands/paginated - Must be before /:id route
+router.get('/paginated', brandsController.getBrandsPaginated);
+
 // GET /brands/:id
 router.get("/:id", async(req, res) => {
     try {
@@ -141,6 +144,5 @@ router.delete("/:id", async(req, res) => {
 });
 
 router.post('/delete-image', brandsController.deleteBrandImage);
-router.get('/paginated', brandsController.getBrandsPaginated);
 
-module.exports = router;
+module.exports = router;    

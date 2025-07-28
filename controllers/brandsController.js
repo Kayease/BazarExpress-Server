@@ -35,7 +35,7 @@ exports.getBrandsPaginated = async (req, res) => {
       console.error('Brand query error:', err);
       throw err;
     }
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(total / parseInt(limit));
     res.json({ items, totalPages });
   } catch (err) {
     console.error('getBrandsPaginated error:', err);
