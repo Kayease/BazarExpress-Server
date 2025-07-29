@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const osrmService = require('../utils/osrmService');
 
 const warehouseSchema = new mongoose.Schema({
     name: { type: String, required: true },
@@ -71,7 +72,7 @@ warehouseSchema.statics.deleteWarehouse = function(id) {
     return this.findByIdAndDelete(id);
 };
 
-// Find the best warehouse for delivery to a specific location
+// Find the best warehouse for delivery to a specific location using OSRM
 warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLat, customerLng) {
     const warehouses = await this.find({ 
         status: 'active',
@@ -84,32 +85,59 @@ warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLa
         return null;
     }
     
-    // Calculate distance to each warehouse and filter by delivery radius
-    const availableWarehouses = warehouses.map(warehouse => {
-        const distance = calculateDistance(
-            warehouse.location.lat,
-            warehouse.location.lng,
-            customerLat,
-            customerLng
-        );
+    try {
+        // Use OSRM to find the nearest warehouse with accurate road distances
+        const result = await osrmService.findNearestWarehouse(customerLat, customerLng, warehouses);
         
-        return {
-            warehouse,
-            distance,
-            canDeliver: distance <= warehouse.deliverySettings.maxDeliveryRadius
-        };
-    }).filter(item => item.canDeliver);
-    
-    if (availableWarehouses.length === 0) {
+        if (result && result.warehouse) {
+            // Check if the nearest warehouse can deliver to this location
+            const canDeliver = result.distance <= result.warehouse.deliverySettings.maxDeliveryRadius;
+            
+            if (canDeliver) {
+                return {
+                    warehouse: result.warehouse,
+                    distance: result.distance,
+                    duration: result.duration,
+                    method: result.fallback ? 'haversine_fallback' : 'osrm'
+                };
+            }
+        }
+        
         return null;
+    } catch (error) {
+        console.error('Error finding best warehouse with OSRM:', error.message);
+        
+        // Fallback to Haversine calculation
+        console.warn('Falling back to Haversine calculation for warehouse selection');
+        
+        const availableWarehouses = [];
+        
+        for (const warehouse of warehouses) {
+            const distance = calculateDistance(
+                warehouse.location.lat,
+                warehouse.location.lng,
+                customerLat,
+                customerLng
+            );
+            
+            if (distance <= warehouse.deliverySettings.maxDeliveryRadius) {
+                availableWarehouses.push({
+                    warehouse,
+                    distance,
+                    duration: osrmService.estimateDurationFromDistance(distance),
+                    method: 'haversine_fallback'
+                });
+            }
+        }
+        
+        if (availableWarehouses.length === 0) {
+            return null;
+        }
+        
+        // Return the closest warehouse
+        availableWarehouses.sort((a, b) => a.distance - b.distance);
+        return availableWarehouses[0];
     }
-    
-    // Return the closest warehouse
-    availableWarehouses.sort((a, b) => a.distance - b.distance);
-    return {
-        warehouse: availableWarehouses[0].warehouse,
-        distance: availableWarehouses[0].distance
-    };
 };
 
 // Helper function for distance calculation

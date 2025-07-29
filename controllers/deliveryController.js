@@ -1,5 +1,6 @@
 const DeliverySettings = require('../models/DeliverySettings');
 const Warehouse = require('../models/Warehouse');
+const osrmService = require('../utils/osrmService');
 
 // Get current delivery settings
 const getDeliverySettings = async (req, res) => {
@@ -40,7 +41,6 @@ const updateDeliverySettings = async (req, res) => {
             maximumDeliveryCharge,
             perKmCharge,
             codAvailable,
-            codExtraCharge,
             calculationMethod
         } = req.body;
 
@@ -59,27 +59,44 @@ const updateDeliverySettings = async (req, res) => {
             });
         }
 
-        // Deactivate existing settings
-        await DeliverySettings.updateMany({ isActive: true }, { isActive: false });
+        // Find existing active settings
+        let settings = await DeliverySettings.findOne({ isActive: true });
 
-        // Create new settings
-        const newSettings = new DeliverySettings({
-            freeDeliveryMinAmount,
-            freeDeliveryRadius,
-            baseDeliveryCharge,
-            minimumDeliveryCharge,
-            maximumDeliveryCharge,
-            perKmCharge,
-            codAvailable,
-            codExtraCharge,
-            calculationMethod,
-            createdBy: req.user.id,
-            updatedBy: req.user.id
-        });
+        if (settings) {
+            // Update existing settings
+            settings.freeDeliveryMinAmount = freeDeliveryMinAmount;
+            settings.freeDeliveryRadius = freeDeliveryRadius;
+            settings.baseDeliveryCharge = baseDeliveryCharge;
+            settings.minimumDeliveryCharge = minimumDeliveryCharge;
+            settings.maximumDeliveryCharge = maximumDeliveryCharge;
+            settings.perKmCharge = perKmCharge;
+            settings.codAvailable = codAvailable;
 
-        await newSettings.save();
+            settings.calculationMethod = calculationMethod;
+            settings.updatedBy = req.user.id;
+            settings.updatedAt = new Date();
 
-        const populatedSettings = await DeliverySettings.findById(newSettings._id)
+            await settings.save();
+        } else {
+            // Create new settings if none exist
+            settings = new DeliverySettings({
+                freeDeliveryMinAmount,
+                freeDeliveryRadius,
+                baseDeliveryCharge,
+                minimumDeliveryCharge,
+                maximumDeliveryCharge,
+                perKmCharge,
+                codAvailable,
+
+                calculationMethod,
+                createdBy: req.user.id,
+                updatedBy: req.user.id
+            });
+
+            await settings.save();
+        }
+
+        const populatedSettings = await DeliverySettings.findById(settings._id)
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
 
@@ -128,19 +145,27 @@ const calculateDeliveryCharge = async (req, res) => {
                 });
             }
             
-            // Check if warehouse can deliver to this location
-            distance = DeliverySettings.calculateDistance(
+            // Check if warehouse can deliver to this location using OSRM
+            const distanceResult = await DeliverySettings.calculateDistance(
                 warehouse.location.lat,
                 warehouse.location.lng,
                 customerLat,
                 customerLng,
-                'haversine'
+                'osrm'
             );
+            distance = distanceResult.distance;
             
             if (distance > warehouse.deliverySettings.maxDeliveryRadius) {
                 return res.status(400).json({
                     success: false,
-                    error: `Delivery not available to this location from ${warehouse.name}. Maximum delivery radius is ${warehouse.deliverySettings.maxDeliveryRadius} km.`
+                    error: `Delivery not available to this location from ${warehouse.name}. Maximum delivery radius is ${warehouse.deliverySettings.maxDeliveryRadius} km, but your location is ${distance.toFixed(2)} km away.`,
+                    distance: Math.round(distance * 100) / 100,
+                    maxRadius: warehouse.deliverySettings.maxDeliveryRadius,
+                    warehouse: {
+                        id: warehouse._id,
+                        name: warehouse.name,
+                        address: warehouse.address
+                    }
                 });
             }
             
@@ -176,14 +201,26 @@ const calculateDeliveryCharge = async (req, res) => {
             selectedWarehouse
         );
 
+        // Get distance calculation result for response
+        const finalDistanceResult = await DeliverySettings.calculateDistance(
+            selectedWarehouse.location.lat,
+            selectedWarehouse.location.lng,
+            customerLat,
+            customerLng,
+            'osrm'
+        );
+
         res.json({
             success: true,
-            distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
+            distance: Math.round(finalDistanceResult.distance * 100) / 100, // Round to 2 decimal places
+            duration: Math.round(finalDistanceResult.duration * 100) / 100, // Duration in minutes
+            calculationMethod: finalDistanceResult.method,
             warehouse: {
                 id: selectedWarehouse._id,
                 name: selectedWarehouse.name,
                 address: selectedWarehouse.address
             },
+            route: finalDistanceResult.route,
             ...deliveryInfo
         });
     } catch (error) {
@@ -251,8 +288,8 @@ const initializeDeliverySettings = async (req, res) => {
             maximumDeliveryCharge: 100,
             perKmCharge: 5,
             codAvailable: true,
-            codExtraCharge: 20,
-            calculationMethod: 'haversine',
+
+            calculationMethod: 'osrm',
             createdBy: req.user.id,
             updatedBy: req.user.id
         });
@@ -277,10 +314,39 @@ const initializeDeliverySettings = async (req, res) => {
     }
 };
 
+// Get OSRM server status
+const getOSRMStatus = async (req, res) => {
+    try {
+        const status = await osrmService.checkHealth();
+        
+        res.json({
+            success: true,
+            osrm: {
+                available: status.available,
+                server: status.server,
+                method: status.method || 'osrm',
+                fallback: status.fallback || false,
+                error: status.error || null
+            }
+        });
+    } catch (error) {
+        console.error('Error getting OSRM status:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get OSRM status',
+            osrm: {
+                available: false,
+                error: error.message
+            }
+        });
+    }
+};
+
 module.exports = {
     getDeliverySettings,
     updateDeliverySettings,
     calculateDeliveryCharge,
     getDeliverySettingsHistory,
-    initializeDeliverySettings
+    initializeDeliverySettings,
+    getOSRMStatus
 };

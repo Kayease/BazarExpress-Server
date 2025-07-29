@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const osrmService = require('../utils/osrmService');
 
 const deliverySettingsSchema = new mongoose.Schema({
     // Free delivery criteria
@@ -46,17 +47,13 @@ const deliverySettingsSchema = new mongoose.Schema({
         type: Boolean, 
         default: true 
     },
-    codExtraCharge: { 
-        type: Number, 
-        default: 20,
-        min: 0
-    },
+
     
     // Distance calculation method
     calculationMethod: {
         type: String,
-        enum: ['haversine', 'straight_line'],
-        default: 'haversine'
+        enum: ['osrm', 'haversine', 'straight_line'],
+        default: 'osrm'
     },
     
     // Active status
@@ -115,11 +112,7 @@ deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance
         deliveryCharge = Math.min(settings.maximumDeliveryCharge, deliveryCharge);
     }
     
-    // Add COD charge if applicable
-    let codCharge = 0;
-    if (paymentMethod === 'cod' && settings.codAvailable) {
-        codCharge = settings.codExtraCharge;
-    }
+    // No COD extra charges - only delivery charge applies
     
     // Check if user can get free delivery by adding more items
     const amountNeededForFreeDelivery = Math.max(0, settings.freeDeliveryMinAmount - cartTotal);
@@ -129,8 +122,7 @@ deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance
     
     return {
         deliveryCharge,
-        codCharge,
-        totalDeliveryCharge: deliveryCharge + codCharge,
+        totalDeliveryCharge: deliveryCharge,
         isFreeDelivery,
         freeDeliveryEligible,
         amountNeededForFreeDelivery,
@@ -139,8 +131,7 @@ deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance
             freeDeliveryRadius: settings.freeDeliveryRadius,
             baseDeliveryCharge: settings.baseDeliveryCharge,
             perKmCharge: settings.perKmCharge,
-            codAvailable: settings.codAvailable,
-            codExtraCharge: settings.codExtraCharge
+            codAvailable: settings.codAvailable
         }
     };
 };
@@ -178,11 +169,7 @@ deliverySettingsSchema.statics.calculateDeliveryChargeWithWarehouse = async func
         deliveryCharge = Math.min(settings.maximumDeliveryCharge, deliveryCharge);
     }
     
-    // Add COD charge if applicable
-    let codCharge = 0;
-    if (paymentMethod === 'cod' && settings.codAvailable) {
-        codCharge = settings.codExtraCharge;
-    }
+    // No COD extra charges - only delivery charge applies
     
     // Check if user can get free delivery by adding more items
     const amountNeededForFreeDelivery = Math.max(0, settings.freeDeliveryMinAmount - cartTotal);
@@ -192,8 +179,7 @@ deliverySettingsSchema.statics.calculateDeliveryChargeWithWarehouse = async func
     
     return {
         deliveryCharge,
-        codCharge,
-        totalDeliveryCharge: deliveryCharge + codCharge,
+        totalDeliveryCharge: deliveryCharge,
         isFreeDelivery,
         freeDeliveryEligible,
         amountNeededForFreeDelivery,
@@ -207,23 +193,43 @@ deliverySettingsSchema.statics.calculateDeliveryChargeWithWarehouse = async func
             freeDeliveryRadius: settings.freeDeliveryRadius,
             baseDeliveryCharge: settings.baseDeliveryCharge,
             perKmCharge: settings.perKmCharge,
-            codAvailable: settings.codAvailable,
-            codExtraCharge: settings.codExtraCharge
+            codAvailable: settings.codAvailable
         }
     };
 };
 
-// Haversine formula for distance calculation
-deliverySettingsSchema.statics.calculateDistance = function(lat1, lon1, lat2, lon2, method = 'haversine') {
+// Distance calculation with OSRM integration
+deliverySettingsSchema.statics.calculateDistance = async function(lat1, lon1, lat2, lon2, method = 'osrm') {
+    if (method === 'osrm') {
+        try {
+            const result = await osrmService.calculateRoute(lat1, lon1, lat2, lon2);
+            return {
+                distance: result.distance,
+                duration: result.duration,
+                method: result.route.fallback ? 'haversine_fallback' : 'osrm',
+                route: result.route
+            };
+        } catch (error) {
+            console.warn('OSRM calculation failed, falling back to Haversine:', error.message);
+            // Fallback to Haversine
+            method = 'haversine';
+        }
+    }
+    
     if (method === 'straight_line') {
         // Simple straight line distance (less accurate but faster)
         const R = 6371; // Earth's radius in kilometers
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
         const distance = Math.sqrt(dLat * dLat + dLon * dLon) * R;
-        return distance;
+        return {
+            distance: distance,
+            duration: osrmService.estimateDurationFromDistance(distance),
+            method: 'straight_line',
+            route: null
+        };
     } else {
-        // Haversine formula (more accurate)
+        // Haversine formula (more accurate than straight line)
         const R = 6371; // Earth's radius in kilometers
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -233,7 +239,12 @@ deliverySettingsSchema.statics.calculateDistance = function(lat1, lon1, lat2, lo
             Math.sin(dLon/2) * Math.sin(dLon/2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         const distance = R * c;
-        return distance;
+        return {
+            distance: distance,
+            duration: osrmService.estimateDurationFromDistance(distance),
+            method: 'haversine',
+            route: null
+        };
     }
 };
 

@@ -55,6 +55,7 @@ app.use("/api/blogs", blogRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/delivery", deliveryRoutes);
+app.use("/api/location", require("./routes/locationRoutes"));
 
 // Global error handler
 app.use(errorHandler);

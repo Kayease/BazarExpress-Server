@@ -5,13 +5,15 @@ const {
     updateDeliverySettings,
     calculateDeliveryCharge,
     getDeliverySettingsHistory,
-    initializeDeliverySettings
+    initializeDeliverySettings,
+    getOSRMStatus
 } = require('../controllers/deliveryController');
 const { isAuth, isAdmin } = require('../middleware/authMiddleware');
 
 // Public routes
 router.post('/calculate', calculateDeliveryCharge);
 router.get('/settings', getDeliverySettings);
+router.get('/osrm/status', getOSRMStatus);
 
 // Admin routes
 router.post('/initialize', isAuth, isAdmin, initializeDeliverySettings);

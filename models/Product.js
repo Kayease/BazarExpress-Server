@@ -12,6 +12,7 @@ const productSchema = new mongoose.Schema({
     category: { type: mongoose.Schema.Types.ObjectId, ref: "Category" },
     subcategory: { type: mongoose.Schema.Types.ObjectId, ref: "Category" },
     warehouse: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse" },
+    warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse" }, // For easier querying
     tax: { type: mongoose.Schema.Types.ObjectId, ref: "Tax" },
     stock: { type: Number, default: 0 },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
