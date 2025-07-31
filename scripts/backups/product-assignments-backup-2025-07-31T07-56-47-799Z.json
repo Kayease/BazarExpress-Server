@@ -1,0 +1,241 @@
+{
+  "timestamp": "2025-07-31T07:56:47.797Z",
+  "totalProducts": 42,
+  "totalWarehouses": 5,
+  "warehouses": [
+    {
+      "_id": "688a1adfe79e3baee1fc5f37",
+      "name": "Delhi Global Store"
+    },
+    {
+      "_id": "688a1adfe79e3baee1fc5f39",
+      "name": "Mumbai Global Store"
+    },
+    {
+      "_id": "688a1adfe79e3baee1fc5f3b",
+      "name": "Bangalore Local Store"
+    },
+    {
+      "_id": "688a1adfe79e3baee1fc5f3d",
+      "name": "Chennai Express Store"
+    },
+    {
+      "_id": "688a1adfe79e3baee1fc5f3f",
+      "name": "Hyderabad Store (Temporarily Closed)"
+    }
+  ],
+  "productAssignments": [
+    {
+      "productId": "688a1adfe79e3baee1fc5f44",
+      "productName": "Organic Milk 1L",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f43",
+      "productName": "Basmati Rice 1kg",
+      "warehouseId": "688a1adfe79e3baee1fc5f3b",
+      "warehouseName": "Bangalore Local Store"
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f45",
+      "productName": "Fresh Bananas",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f46",
+      "productName": "Whole Wheat Bread",
+      "warehouseId": "688a1adfe79e3baee1fc5f37",
+      "warehouseName": "Delhi Global Store"
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f47",
+      "productName": "Fresh Apples",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f4b",
+      "productName": "Greek Yogurt",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f4a",
+      "productName": "Olive Oil 500ml",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f4c",
+      "productName": "Pasta 500g",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f4d",
+      "productName": "Wireless Earbuds",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f4e",
+      "productName": "Phone Charger",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f4f",
+      "productName": "Bluetooth Speaker",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f50",
+      "productName": "Power Bank 10000mAh",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f51",
+      "productName": "Wireless Mouse",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f52",
+      "productName": "USB Cable Type-C",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f53",
+      "productName": "Phone Stand",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f54",
+      "productName": "LED Strip Lights",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f55",
+      "productName": "Cotton T-Shirt",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f56",
+      "productName": "Denim Jeans",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f57",
+      "productName": "Running Shoes",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f58",
+      "productName": "Casual Shirt",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f59",
+      "productName": "Summer Dress",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f5a",
+      "productName": "Leather Wallet",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f5b",
+      "productName": "Baseball Cap",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f5c",
+      "productName": "Sunglasses",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f5d",
+      "productName": "Non-stick Pan",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f5e",
+      "productName": "Coffee Mug Set",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f5f",
+      "productName": "LED Desk Lamp",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f60",
+      "productName": "Kitchen Knife Set",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f61",
+      "productName": "Ceramic Dinner Plates",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f62",
+      "productName": "Stainless Steel Water Bottle",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f63",
+      "productName": "Bamboo Cutting Board",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f64",
+      "productName": "Glass Storage Containers",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f65",
+      "productName": "Organic Honey 250g",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f66",
+      "productName": "Green Tea Bags",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f67",
+      "productName": "Smartphone Case",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f68",
+      "productName": "Bluetooth Headphones",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f69",
+      "productName": "Yoga Mat",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f6a",
+      "productName": "Backpack",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f6b",
+      "productName": "Scented Candles",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f48",
+      "productName": "Chicken Breast",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f49",
+      "productName": "Fresh Tomatoes",
+      "warehouseName": null
+    },
+    {
+      "productId": "688a1adfe79e3baee1fc5f6c",
+      "productName": "Indoor Plant Pot",
+      "warehouseName": null
+    }
+  ]
+}

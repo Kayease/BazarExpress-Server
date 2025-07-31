@@ -40,8 +40,7 @@ const updateDeliverySettings = async (req, res) => {
             minimumDeliveryCharge,
             maximumDeliveryCharge,
             perKmCharge,
-            codAvailable,
-            calculationMethod
+            codExtraCharges
         } = req.body;
 
         // Validation
@@ -70,9 +69,7 @@ const updateDeliverySettings = async (req, res) => {
             settings.minimumDeliveryCharge = minimumDeliveryCharge;
             settings.maximumDeliveryCharge = maximumDeliveryCharge;
             settings.perKmCharge = perKmCharge;
-            settings.codAvailable = codAvailable;
-
-            settings.calculationMethod = calculationMethod;
+            settings.codExtraCharges = codExtraCharges;
             settings.updatedBy = req.user.id;
             settings.updatedAt = new Date();
 
@@ -86,9 +83,7 @@ const updateDeliverySettings = async (req, res) => {
                 minimumDeliveryCharge,
                 maximumDeliveryCharge,
                 perKmCharge,
-                codAvailable,
-
-                calculationMethod,
+                codExtraCharges,
                 createdBy: req.user.id,
                 updatedBy: req.user.id
             });

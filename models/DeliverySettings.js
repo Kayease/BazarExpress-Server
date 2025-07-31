@@ -43,9 +43,9 @@ const deliverySettingsSchema = new mongoose.Schema({
     },
     
     // COD settings
-    codAvailable: { 
+    codExtraCharges: { 
         type: Boolean, 
-        default: true 
+        default: false 
     },
 
     

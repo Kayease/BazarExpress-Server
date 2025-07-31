@@ -43,10 +43,12 @@ async function deleteImageFromCloudinary(imageUrl) {
 async function getCategories(req, res) {
     try {
         const categories = await Category.find().sort({ sortOrder: 1, name: 1 });
-        // Count products for each category
+        // Count products for each category (including both direct and subcategory assignments)
         const categoriesWithCount = await Promise.all(categories.map(async (cat) => {
-            const count = await Product.countDocuments({ category: cat._id });
-            return { ...cat.toObject(), productCount: count };
+            const directCount = await Product.countDocuments({ category: cat._id });
+            const subCount = await Product.countDocuments({ subcategory: cat._id });
+            const totalCount = directCount + subCount;
+            return { ...cat.toObject(), productCount: totalCount };
         }));
         res.json(categoriesWithCount);
     } catch (err) {
@@ -107,11 +109,26 @@ async function updateCategory(req, res) {
 async function deleteCategory(req, res) {
     try {
         const { id } = req.params;
-        // Check if any product exists under this category
-        const productCount = await Product.countDocuments({ category: id });
-        if (productCount > 0) {
-            return res.status(400).json({ error: "Cannot delete category: Products exist under this category." });
+        // Check if any product exists under this category (either as main category or subcategory)
+        const categoryProductCount = await Product.countDocuments({ category: id });
+        const subcategoryProductCount = await Product.countDocuments({ subcategory: id });
+        const totalProductCount = categoryProductCount + subcategoryProductCount;
+        
+        if (totalProductCount > 0) {
+            return res.status(400).json({ 
+                error: "Cannot delete category: Products exist under this category",
+                details: `Found ${categoryProductCount} products as main category and ${subcategoryProductCount} products as subcategory.`
+            });
         }
+        
+        // Check if this category has any subcategories
+        const hasSubcategories = await Category.exists({ parentId: id });
+        if (hasSubcategories) {
+            return res.status(400).json({ 
+                error: "Cannot delete category: This category has subcategories. Please delete the subcategories first." 
+            });
+        }
+
         // Get the category first to access its thumbnail
         const category = await Category.findById(id);
         if (!category) {
@@ -139,10 +156,12 @@ async function getSubcategoriesByParent(req, res) {
         
         const subcategories = await Category.find({ parentId }).sort({ sortOrder: 1, name: 1 });
         
-        // Count products for each subcategory
+        // Count products for each subcategory (checking both category and subcategory fields)
         const subcategoriesWithCount = await Promise.all(subcategories.map(async (subcat) => {
-            const count = await Product.countDocuments({ subcategory: subcat._id });
-            return { ...subcat.toObject(), productCount: count };
+            const categoryCount = await Product.countDocuments({ category: subcat._id });
+            const subcategoryCount = await Product.countDocuments({ subcategory: subcat._id });
+            const totalCount = categoryCount + subcategoryCount;
+            return { ...subcat.toObject(), productCount: totalCount };
         }));
         
         res.json(subcategoriesWithCount);

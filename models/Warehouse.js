@@ -11,31 +11,41 @@ const warehouseSchema = new mongoose.Schema({
     contactPhone: { type: String },
     email: { type: String },
     capacity: { type: Number },
-    status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     
     // Delivery settings for this warehouse
     deliverySettings: {
-        maxDeliveryRadius: { 
-            type: Number, 
-            default: 50, // Maximum delivery radius in km
-            min: 0 
-        },
-        freeDeliveryRadius: { 
-            type: Number, 
-            default: 3, // Free delivery radius in km
-            min: 0 
-        },
         isDeliveryEnabled: { 
             type: Boolean, 
             default: true 
         },
+        disabledMessage: {
+            type: String,
+            default: 'Delivery is currently unavailable in your area. Please try again later or switch to Global Store.'
+        },
+        deliveryPincodes: [{
+            type: String,
+            validate: {
+                validator: function(v) {
+                    return /^\d{6}$/.test(v);
+                },
+                message: props => `${props.value} is not a valid 6-digit pincode!`
+            }
+        }],
+        is24x7Delivery: {
+            type: Boolean,
+            default: true
+        },
         deliveryDays: [{
             type: String,
-            enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+            enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         }],
         deliveryHours: {
             start: { type: String, default: '09:00' }, // 24-hour format
             end: { type: String, default: '21:00' }
+        },
+        timezone: {
+            type: String,
+            default: 'Asia/Kolkata'
         }
     },
     
@@ -70,6 +80,124 @@ warehouseSchema.statics.updateWarehouse = function(id, updates) {
 
 warehouseSchema.statics.deleteWarehouse = function(id) {
     return this.findByIdAndDelete(id);
+};
+
+// Find warehouses by PIN code for the new delivery system
+warehouseSchema.statics.findWarehousesByPincode = async function(pincode) {
+    if (!pincode || !/^\d{6}$/.test(pincode)) {
+        throw new Error('Valid 6-digit pincode is required');
+    }
+    
+    // Find custom warehouses that deliver to this pincode (non-24x7 with specific pincodes)
+    const customWarehouses = await this.find({
+        'deliverySettings.is24x7Delivery': false,
+        'deliverySettings.deliveryPincodes': pincode,
+        'location.lat': { $exists: true },
+        'location.lng': { $exists: true }
+    });
+    
+    // Find 24x7 warehouses (global stores) - they can deliver to any pincode
+    const globalWarehouses = await this.find({
+        'deliverySettings.is24x7Delivery': true,
+        'deliverySettings.isDeliveryEnabled': true,
+        'location.lat': { $exists: true },
+        'location.lng': { $exists: true }
+    });
+    
+    return {
+        customWarehouses,
+        globalWarehouses
+    };
+
+};
+
+// Format time (e.g., '09:00' -> '9:00 AM')
+function formatTime12Hour(time24) {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    let hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    if (hour === 0) hour = 12;
+    else if (hour > 12) hour -= 12;
+    return `${hour}:${minutes} ${ampm}`;
+}
+
+// Check if a warehouse is currently delivering
+warehouseSchema.statics.isWarehouseCurrentlyDelivering = function(warehouse, timezone = 'Asia/Kolkata') {
+    if (!warehouse.deliverySettings.isDeliveryEnabled) {
+        return {
+            isDelivering: false,
+            message: warehouse.deliverySettings.disabledMessage || 'Delivery is currently disabled for this store',
+            shortMessage: 'Store Disabled',
+            reason: 'disabled',
+        };
+    }
+    if (warehouse.deliverySettings.is24x7Delivery) {
+        return {
+            isDelivering: true,
+            message: 'Same day delivery available',
+            shortMessage: 'Same day delivery available',
+            reason: 'open_24x7',
+        };
+    }
+    // Time logic
+    const now = new Date();
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: timezone });
+    const deliveryDays = warehouse.deliverySettings.deliveryDays || [];
+    const deliveryHours = warehouse.deliverySettings.deliveryHours || { start: '09:00', end: '21:00' };
+    // Not a delivery day
+    if (deliveryDays.length > 0 && !deliveryDays.includes(currentDay)) {
+        const nextDeliveryDay = getNextDeliveryDay(deliveryDays, currentDay);
+        const nextDeliveryTime = formatTime12Hour(deliveryHours.start);
+        return {
+            isDelivering: false,
+            message: `Store closed today. Next delivery available on ${nextDeliveryDay} from ${nextDeliveryTime}`,
+            shortMessage: `Next Delivery on ${nextDeliveryDay}`,
+            nextDeliveryDay,
+            nextDeliveryTime: deliveryHours.start,
+            reason: 'closed_today',
+        };
+    }
+    // Time check
+    const currentTime = now.toLocaleTimeString('en-GB', {
+        hour12: false,
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+    const startTime = deliveryHours.start;
+    const endTime = deliveryHours.end;
+    if (currentTime >= startTime && currentTime <= endTime) {
+        return {
+            isDelivering: true,
+            message: 'Same day delivery available',
+            shortMessage: 'Same day delivery available',
+            reason: 'open_now',
+        };
+    } else if (currentTime < startTime) {
+        // Before opening
+        const openingTime = formatTime12Hour(startTime);
+        return {
+            isDelivering: false,
+            message: `Store opens today at ${openingTime}. Delivery available from ${openingTime} onwards`,
+            shortMessage: `Opens Today at ${openingTime}`,
+            nextDeliveryDay: 'Today',
+            nextDeliveryTime: startTime,
+            reason: 'before_opening',
+        };
+    } else {
+        // After closing
+        const nextDeliveryDay = getNextDeliveryDay(deliveryDays, currentDay);
+        const nextDeliveryTime = formatTime12Hour(deliveryHours.start);
+        return {
+            isDelivering: false,
+            message: `Store closed for today. Next delivery available ${nextDeliveryDay} from ${nextDeliveryTime}`,
+            shortMessage: `Next Delivery ${nextDeliveryDay}`,
+            nextDeliveryDay,
+            nextDeliveryTime: deliveryHours.start,
+            reason: 'after_closing',
+        };
+    }
 };
 
 // Find the best warehouse for delivery to a specific location using OSRM
@@ -139,6 +267,29 @@ warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLa
         return availableWarehouses[0];
     }
 };
+
+// Helper function to get next delivery day
+function getNextDeliveryDay(deliveryDays, currentDay) {
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDayIndex = daysOfWeek.indexOf(currentDay);
+    
+    // If no delivery days specified, assume next day
+    if (deliveryDays.length === 0) {
+        return daysOfWeek[(currentDayIndex + 1) % 7];
+    }
+    
+    // Find next delivery day
+    for (let i = 1; i <= 7; i++) {
+        const nextDayIndex = (currentDayIndex + i) % 7;
+        const nextDay = daysOfWeek[nextDayIndex];
+        if (deliveryDays.includes(nextDay)) {
+            return nextDay;
+        }
+    }
+    
+    // Fallback to first delivery day
+    return deliveryDays[0];
+}
 
 // Helper function for distance calculation
 function calculateDistance(lat1, lon1, lat2, lon2) {

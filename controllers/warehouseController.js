@@ -1,4 +1,5 @@
 const Warehouse = require("../models/Warehouse");
+const Product = require("../models/Product");
 
 // TODO: Replace with real user auth, for now use req.body.userId or req.user.id
 exports.createWarehouse = async(req, res, next) => {
@@ -10,23 +11,47 @@ exports.createWarehouse = async(req, res, next) => {
             contactPhone,
             email,
             capacity,
-            status,
             userId,
+            deliverySettings = {
+                isDeliveryEnabled: false,
+                disabledMessage: '',
+                deliveryPincodes: [],
+                is24x7Delivery: true,
+                deliveryDays: [],
+                deliveryHours: {
+                    start: '09:00',
+                    end: '18:00'
+                }
+            }
         } = req.body || {};
+
         if (!name || !address || !userId) {
             return res
                 .status(400)
                 .json({ error: "Missing required fields: name, address, userId" });
         }
-        const warehouse = await Warehouse.createWarehouse({
+
+        // Create warehouse with actual form values
+        const warehouse = await Warehouse.create({
             name,
             address,
             location,
             contactPhone,
             email,
             capacity,
-            status,
             userId,
+            deliverySettings: {
+                ...deliverySettings,
+                deliveryPincodes: deliverySettings.deliveryPincodes || [],
+                deliveryDays: deliverySettings.deliveryDays || [],
+                isDeliveryEnabled: deliverySettings.isDeliveryEnabled || false,
+                is24x7Delivery: deliverySettings.is24x7Delivery || false,
+                disabledMessage: deliverySettings.disabledMessage || '',
+                deliveryHours: {
+                    start: deliverySettings.deliveryHours?.start || '09:00',
+                    end: deliverySettings.deliveryHours?.end || '18:00'
+                }
+            }
         });
         res.status(201).json(warehouse);
     } catch (err) {
@@ -61,12 +86,271 @@ exports.updateWarehouse = async(req, res, next) => {
     }
 };
 
+exports.checkWarehouseProducts = async(req, res, next) => {
+    try {
+        const { id } = req.params;
+        const productsCount = await Product.countDocuments({ warehouse: id });
+        const warehouse = await Warehouse.findById(id);
+        
+        if (!warehouse) {
+            return res.status(404).json({
+                message: "Warehouse not found"
+            });
+        }
+
+        res.json({
+            hasProducts: productsCount > 0,
+            productsCount,
+            warehouseName: warehouse.name
+        });
+    } catch (err) {
+        console.error('Error checking warehouse products:', err);
+        res.status(500).json({
+            error: "Error checking warehouse products",
+            details: err.message
+        });
+    }
+};
+
 exports.deleteWarehouse = async(req, res, next) => {
     try {
         const { id } = req.params;
+        
+        // Check if warehouse exists
+        const warehouse = await Warehouse.findById(id);
+        if (!warehouse) {
+            return res.status(404).json({
+                error: "Warehouse not found"
+            });
+        }
+        
+        // Check if there are any products in this warehouse
+        const productsCount = await Product.countDocuments({ warehouse: id });
+        if (productsCount > 0) {
+            return res.status(400).json({ 
+                error: "Cannot delete warehouse that contains products. Please remove or transfer all products first.",
+                productsCount,
+                warehouseName: warehouse.name
+            });
+        }
+
         await Warehouse.deleteWarehouse(id);
-        res.json({ success: true });
+        res.json({
+            success: true,
+            message: "Warehouse deleted successfully"
+        });
     } catch (err) {
-        next(err);
+        console.error('Error deleting warehouse:', err);
+        res.status(500).json({
+            error: "Error deleting warehouse",
+            details: err.message
+        });
+    }
+};
+
+// New controller methods for dynamic delivery system
+
+// Check pincode delivery availability and return warehouse matching logic
+exports.checkPincodeDelivery = async (req, res, next) => {
+    try {
+        const { pincode } = req.body;
+        
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Valid 6-digit pincode is required'
+            });
+        }
+        
+        const { customWarehouses, globalWarehouses } = await Warehouse.findWarehousesByPincode(pincode);
+        
+        let matchedWarehouse = null;
+        let deliveryStatus = null;
+        let mode = 'global';
+        
+        // Check custom warehouses first
+        if (customWarehouses.length > 0) {
+            for (const warehouse of customWarehouses) {
+                const status = Warehouse.isWarehouseCurrentlyDelivering(warehouse);
+                
+                if (status.isDelivering) {
+                    matchedWarehouse = warehouse;
+                    deliveryStatus = status;
+                    mode = 'custom';
+                    break;
+                } else {
+                    // Store the first disabled custom warehouse for potential overlay
+                    if (!matchedWarehouse) {
+                        matchedWarehouse = warehouse;
+                        deliveryStatus = status;
+                        mode = 'custom-disabled';
+                    }
+                }
+            }
+        }
+        
+        res.json({
+            success: true,
+            pincode,
+            mode, // 'custom', 'custom-disabled', or 'global'
+            matchedWarehouse,
+            deliveryStatus,
+            customWarehouses: customWarehouses.length,
+            globalWarehouses: globalWarehouses.length,
+            hasCustomWarehouse: customWarehouses.length > 0,
+            hasGlobalWarehouse: globalWarehouses.length > 0
+        });
+        
+    } catch (err) {
+        console.error('Error checking pincode delivery:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to check pincode delivery',
+            details: err.message
+        });
+    }
+};
+
+// Get products based on pincode with warehouse filtering
+exports.getProductsByPincode = async (req, res, next) => {
+    try {
+        const { pincode, page = 1, limit = 20, category, search, mode = 'auto' } = req.query;
+        
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Valid 6-digit pincode is required'
+            });
+        }
+        
+        let result;
+        
+        if (mode === 'global') {
+            // Force global mode - only show 24x7 warehouses
+            const globalWarehouses = await Warehouse.find({
+                'deliverySettings.is24x7Delivery': true,
+                'deliverySettings.isDeliveryEnabled': true,
+                'location.lat': { $exists: true },
+                'location.lng': { $exists: true }
+            });
+            
+            if (globalWarehouses.length === 0) {
+                return res.json({
+                    success: true,
+                    products: [],
+                    totalProducts: 0,
+                    deliveryMode: 'global',
+                    deliveryMessage: 'No global delivery available',
+                    warehouses: [],
+                    pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, pages: 0 }
+                });
+            }
+            
+            const warehouseIds = globalWarehouses.map(w => w._id);
+            
+            let productQuery = {
+                warehouse: { $in: warehouseIds },
+                status: 'active',
+                stock: { $gt: 0 }
+            };
+            
+            if (category) productQuery.category = category;
+            if (search) {
+                productQuery.$or = [
+                    { name: { $regex: search, $options: 'i' } },
+                    { description: { $regex: search, $options: 'i' } }
+                ];
+            }
+            
+            const skip = (parseInt(page) - 1) * parseInt(limit);
+            const [products, totalProducts] = await Promise.all([
+                Product.find(productQuery)
+                    .populate('category')
+                    .populate('subcategory')
+                    .populate('brand')
+                    .populate('warehouse')
+                    .skip(skip)
+                    .limit(parseInt(limit))
+                    .sort({ createdAt: -1 }),
+                Product.countDocuments(productQuery)
+            ]);
+            
+            result = {
+                success: true,
+                products,
+                totalProducts,
+                deliveryMode: 'global',
+                deliveryMessage: 'May take few days',
+                warehouses: globalWarehouses,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total: totalProducts,
+                    pages: Math.ceil(totalProducts / parseInt(limit))
+                }
+            };
+        } else {
+            // Auto mode - use warehouse logic
+            result = await Warehouse.getEligibleProductsByPincode(pincode, {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                category,
+                search
+            });
+        }
+        
+        res.json(result);
+        
+    } catch (err) {
+        console.error('Error getting products by pincode:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get products by pincode',
+            details: err.message
+        });
+    }
+};
+
+// Get delivery status for a specific warehouse
+exports.getDeliveryStatus = async (req, res, next) => {
+    try {
+        const { warehouseId, timezone = 'Asia/Kolkata' } = req.body;
+        
+        if (!warehouseId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Warehouse ID is required'
+            });
+        }
+        
+        const warehouse = await Warehouse.findById(warehouseId);
+        if (!warehouse) {
+            return res.status(404).json({
+                success: false,
+                error: 'Warehouse not found'
+            });
+        }
+        
+        const deliveryStatus = Warehouse.isWarehouseCurrentlyDelivering(warehouse, timezone);
+        
+        res.json({
+            success: true,
+            warehouse: {
+                id: warehouse._id,
+                name: warehouse.name,
+                type: warehouse.warehouseType,
+                address: warehouse.address
+            },
+            deliveryStatus,
+            timezone
+        });
+        
+    } catch (err) {
+        console.error('Error getting delivery status:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get delivery status',
+            details: err.message
+        });
     }
 };
