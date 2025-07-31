@@ -112,72 +112,94 @@ warehouseSchema.statics.findWarehousesByPincode = async function(pincode) {
 
 // Fetch eligible products for a pincode with pagination, category, and search
 warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, options = {}) {
+    console.log('[Warehouse.getEligibleProductsByPincode] Called with:', { pincode, options });
+    try {
     const Product = require('./Product');
-    const {
-        page = 1,
-        limit = 20,
-        category,
-        search
-    } = options;
-    if (!pincode || !/^\d{6}$/.test(pincode)) {
-        throw new Error('Valid 6-digit pincode is required');
-    }
+    const { page = 1, limit = 20, category, search } = options;
     // 1. Get eligible warehouses (custom + global)
     const { customWarehouses, globalWarehouses } = await this.findWarehousesByPincode(pincode);
-    const allWarehouses = [...customWarehouses, ...globalWarehouses];
-    if (allWarehouses.length === 0) {
-        return {
-            products: [],
-            totalProducts: 0,
-            warehouses: [],
-            deliveryMode: 'none',
-            deliveryMessage: 'No delivery available for this pincode',
-            pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, pages: 0 }
-        };
-    }
-    const warehouseIds = allWarehouses.map(w => w._id);
-    // 2. Build product query
-    let productQuery = {
-        warehouse: { $in: warehouseIds },
-        status: 'active',
-        stock: { $gt: 0 }
-    };
-    if (category) {
-        productQuery.category = category;
-    }
-    if (search) {
-        productQuery.$or = [
-            { name: { $regex: search, $options: 'i' } },
-            { description: { $regex: search, $options: 'i' } }
-        ];
-    }
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    // 3. Fetch products and total count
-    const [products, totalProducts] = await Promise.all([
-        Product.find(productQuery)
-            .populate('category')
-            .populate('subcategory')
-            .populate('brand')
-            .populate('warehouse')
-            .skip(skip)
-            .limit(parseInt(limit))
-            .sort({ createdAt: -1 }),
-        Product.countDocuments(productQuery)
-    ]);
-    // 4. Return results
-    return {
-        products,
-        totalProducts,
-        warehouses: allWarehouses,
-        deliveryMode: customWarehouses.length > 0 ? 'custom' : 'global',
-        deliveryMessage: customWarehouses.length > 0 ? 'Delivery available from local warehouse' : 'May take few days',
-        pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
-            total: totalProducts,
-            pages: Math.ceil(totalProducts / parseInt(limit))
+        console.log('[Warehouse.getEligibleProductsByPincode] customWarehouses:', customWarehouses.length, 'globalWarehouses:', globalWarehouses.length);
+        let warehousesToUse = [];
+        let deliveryMode = 'none';
+        let deliveryMessage = '';
+        if (customWarehouses.length > 0) {
+            warehousesToUse = customWarehouses;
+            deliveryMode = 'custom';
+            deliveryMessage = 'Delivery available from local warehouse';
+        } else if (globalWarehouses.length > 0) {
+            warehousesToUse = globalWarehouses;
+            deliveryMode = 'global';
+            // Check if any 24x7 warehouse explicitly lists this pincode for same-day delivery
+            let sameDayWarehouse = globalWarehouses.find(w => Array.isArray(w.deliverySettings.deliveryPincodes) && w.deliverySettings.deliveryPincodes.includes(pincode));
+            if (sameDayWarehouse) {
+                deliveryMessage = 'Same day delivery';
+                console.log('[Warehouse.getEligibleProductsByPincode] 24x7 warehouse with same-day delivery found:', sameDayWarehouse._id);
+            } else {
+                deliveryMessage = 'May take few days';
+            }
+        } else {
+            console.warn('[Warehouse.getEligibleProductsByPincode] No warehouses found for pincode:', pincode);
+            return {
+                products: [],
+                totalProducts: 0,
+                warehouses: [],
+                deliveryMode: 'none',
+                deliveryMessage: 'No delivery available for this pincode',
+                pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, pages: 0 }
+            };
         }
-    };
+        const warehouseIds = warehousesToUse.map(w => w._id);
+        console.log('[Warehouse.getEligibleProductsByPincode] warehouseIds:', warehouseIds);
+        // 2. Build product query
+        let productQuery = {
+            warehouse: { $in: warehouseIds },
+            status: 'active',
+            stock: { $gt: 0 }
+        };
+        if (category) {
+            productQuery.category = category;
+            console.log('[Warehouse.getEligibleProductsByPincode] Filtering by category:', category);
+        }
+        if (search) {
+            productQuery.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+            console.log('[Warehouse.getEligibleProductsByPincode] Filtering by search:', search);
+        }
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        console.log('[Warehouse.getEligibleProductsByPincode] Product query:', productQuery, '| Skip:', skip, '| Limit:', limit);
+        // 3. Fetch products and total count
+        const [products, totalProducts] = await Promise.all([
+            Product.find(productQuery)
+                .populate('category')
+                .populate('subcategory')
+                .populate('brand')
+                .populate('warehouse')
+                .skip(skip)
+                .limit(parseInt(limit))
+                .sort({ createdAt: -1 }),
+            Product.countDocuments(productQuery)
+        ]);
+        console.log('[Warehouse.getEligibleProductsByPincode] Products found:', products.length, 'Total:', totalProducts);
+        // 4. Return results
+        return {
+            products,
+            totalProducts,
+            warehouses: warehousesToUse,
+            deliveryMode,
+            deliveryMessage,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: totalProducts,
+                pages: Math.ceil(totalProducts / parseInt(limit))
+            }
+        };
+    } catch (err) {
+        console.error('[Warehouse.getEligibleProductsByPincode] ERROR:', err);
+        throw err;
+    }
 };
 
 // Format time (e.g., '09:00' -> '9:00 AM')
