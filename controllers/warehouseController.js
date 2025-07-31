@@ -213,6 +213,8 @@ exports.checkPincodeDelivery = async (req, res, next) => {
 
 // Get products based on pincode with warehouse filtering
 exports.getProductsByPincode = async (req, res, next) => {
+    // Detailed request log
+    console.log('[getProductsByPincode] Called with query:', JSON.stringify(req.query));
     try {
         const { pincode, page = 1, limit = 20, category, search, mode = 'auto' } = req.query;
         
@@ -224,17 +226,23 @@ exports.getProductsByPincode = async (req, res, next) => {
         }
         
         let result;
+        console.log('[getProductsByPincode] Mode:', mode, '| Category:', category, '| Search:', search, '| Page:', page, '| Limit:', limit);
         
         if (mode === 'global') {
+            console.log('[getProductsByPincode] Fetching global warehouses for pincode:', pincode);
             // Force global mode - only show 24x7 warehouses
-            const globalWarehouses = await Warehouse.find({
+            const globalWarehousesQuery = {
                 'deliverySettings.is24x7Delivery': true,
                 'deliverySettings.isDeliveryEnabled': true,
                 'location.lat': { $exists: true },
                 'location.lng': { $exists: true }
-            });
+            };
+            console.log('[getProductsByPincode] Global warehouses query:', JSON.stringify(globalWarehousesQuery));
+            const globalWarehouses = await Warehouse.find(globalWarehousesQuery);
+            console.log('[getProductsByPincode] Found global warehouses:', globalWarehouses.length);
             
             if (globalWarehouses.length === 0) {
+                console.warn('[getProductsByPincode] No global warehouses found for pincode:', pincode);
                 return res.json({
                     success: true,
                     products: [],
@@ -247,6 +255,7 @@ exports.getProductsByPincode = async (req, res, next) => {
             }
             
             const warehouseIds = globalWarehouses.map(w => w._id);
+            console.log('[getProductsByPincode] Global warehouse IDs:', warehouseIds);
             
             let productQuery = {
                 warehouse: { $in: warehouseIds },
@@ -254,8 +263,12 @@ exports.getProductsByPincode = async (req, res, next) => {
                 stock: { $gt: 0 }
             };
             
-            if (category) productQuery.category = category;
+            if (category) {
+                productQuery.category = category;
+                console.log('[getProductsByPincode] Filtering by category:', category);
+            }
             if (search) {
+                console.log('[getProductsByPincode] Filtering by search:', search);
                 productQuery.$or = [
                     { name: { $regex: search, $options: 'i' } },
                     { description: { $regex: search, $options: 'i' } }
@@ -263,6 +276,7 @@ exports.getProductsByPincode = async (req, res, next) => {
             }
             
             const skip = (parseInt(page) - 1) * parseInt(limit);
+            console.log('[getProductsByPincode] Product query:', JSON.stringify(productQuery), '| Skip:', skip, '| Limit:', limit);
             const [products, totalProducts] = await Promise.all([
                 Product.find(productQuery)
                     .populate('category')
@@ -274,6 +288,7 @@ exports.getProductsByPincode = async (req, res, next) => {
                     .sort({ createdAt: -1 }),
                 Product.countDocuments(productQuery)
             ]);
+            console.log('[getProductsByPincode] Product query result:', JSON.stringify({ products, totalProducts }));
             
             result = {
                 success: true,
@@ -291,14 +306,21 @@ exports.getProductsByPincode = async (req, res, next) => {
             };
         } else {
             // Auto mode - use warehouse logic
-            result = await Warehouse.getEligibleProductsByPincode(pincode, {
+            console.log('[getProductsByPincode] Using getEligibleProductsByPincode for pincode:', pincode);
+            const eligibleResult = await Warehouse.getEligibleProductsByPincode(pincode, {
                 page: parseInt(page),
                 limit: parseInt(limit),
                 category,
                 search
             });
+            console.log('[getProductsByPincode] Eligible products result:', JSON.stringify(eligibleResult));
+            result = {
+                success: true,
+                ...eligibleResult
+            };
         }
         
+        console.log('[getProductsByPincode] Sending result:', JSON.stringify(result));
         res.json(result);
         
     } catch (err) {
