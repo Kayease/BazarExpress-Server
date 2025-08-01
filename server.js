@@ -31,7 +31,7 @@ const MONGODB_URI = process.env.DB_URL;
 const allowedOrigins = [
   'http://localhost:1000',
   'http://localhost:3000',
-  'https://bazar.sparkshift.digital/',
+  'https://bazar.sparkshift.digital',
   // Add more if needed
 ];
 
