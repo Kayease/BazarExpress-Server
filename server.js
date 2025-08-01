@@ -28,8 +28,22 @@ const port = process.env.PORT || 4000;
 const MONGODB_URI = process.env.DB_URL;
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:1000',
+  'http://localhost:3000',
+  'https://bazar.sparkshift.digital/',
+  // Add more if needed
+];
+
 app.use(cors({
-  origin: '*',
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // Allow non-browser requests
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
