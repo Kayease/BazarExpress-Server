@@ -1,12 +1,17 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
+const Warehouse = require('../models/Warehouse');
 
 // Get user's cart
 const getCart = async (req, res) => {
     try {
         const user = await User.findById(req.user.id).populate({
             path: 'cart.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: {
+                path: 'tax',
+                model: 'Tax'
+            }
         });
 
         if (!user) {
@@ -38,10 +43,14 @@ const addToCart = async (req, res) => {
             return res.status(400).json({ error: 'Product ID is required' });
         }
 
-        // Verify product exists
-        const product = await Product.findById(productId);
+        // Verify product exists and populate warehouse and tax
+        const product = await Product.findById(productId).populate(['warehouse', 'tax']);
         if (!product) {
             return res.status(404).json({ error: 'Product not found' });
+        }
+
+        if (!product.warehouse) {
+            return res.status(400).json({ error: 'Product warehouse information not found' });
         }
 
         const user = await User.findById(req.user.id);
@@ -55,9 +64,57 @@ const addToCart = async (req, res) => {
         );
 
         if (existingItemIndex > -1) {
-            // Update quantity if item exists
+            // Update quantity if item exists (no warehouse validation needed for existing items)
             user.cart[existingItemIndex].quantity += quantity;
         } else {
+            // Warehouse validation for new items only
+            if (user.cart.length > 0) {
+                // Get existing cart items with warehouse information
+                await user.populate({
+                    path: 'cart.productId',
+                    populate: [
+                        {
+                            path: 'warehouse',
+                            model: 'Warehouse'
+                        },
+                        {
+                            path: 'tax',
+                            model: 'Tax'
+                        }
+                    ]
+                });
+
+                // Check for warehouse conflicts
+                const currentProductWarehouse = product.warehouse;
+                const isCurrentProductGlobal = currentProductWarehouse.deliverySettings?.is24x7Delivery === true;
+
+                // Find existing custom warehouse (non-24x7) in cart
+                let existingCustomWarehouse = null;
+                for (const cartItem of user.cart) {
+                    if (cartItem.productId && cartItem.productId.warehouse) {
+                        const itemWarehouse = cartItem.productId.warehouse;
+                        const isItemGlobal = itemWarehouse.deliverySettings?.is24x7Delivery === true;
+                        
+                        if (!isItemGlobal) {
+                            existingCustomWarehouse = itemWarehouse;
+                            break;
+                        }
+                    }
+                }
+
+                // Validation logic:
+                // 1. If trying to add custom warehouse product and cart has different custom warehouse product
+                if (!isCurrentProductGlobal && existingCustomWarehouse && 
+                    existingCustomWarehouse._id.toString() !== currentProductWarehouse._id.toString()) {
+                    return res.status(400).json({ 
+                        error: 'WAREHOUSE_CONFLICT',
+                        message: `Cannot add products from different custom warehouses. Your cart contains items from "${existingCustomWarehouse.name}". Please clear your cart or choose products from the same warehouse.`,
+                        existingWarehouse: existingCustomWarehouse.name,
+                        newWarehouse: currentProductWarehouse.name
+                    });
+                }
+            }
+
             // Add new item to cart
             user.cart.push({
                 productId,
@@ -212,15 +269,43 @@ const syncCart = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Get existing cart items with warehouse information for validation
+        if (user.cart.length > 0) {
+            await user.populate({
+                path: 'cart.productId',
+                populate: {
+                    path: 'warehouse',
+                    model: 'Warehouse'
+                }
+            });
+        }
+
+        // Find existing custom warehouse in current cart
+        let existingCustomWarehouse = null;
+        for (const cartItem of user.cart) {
+            if (cartItem.productId && cartItem.productId.warehouse) {
+                const itemWarehouse = cartItem.productId.warehouse;
+                const isItemGlobal = itemWarehouse.deliverySettings?.is24x7Delivery === true;
+                
+                if (!isItemGlobal) {
+                    existingCustomWarehouse = itemWarehouse;
+                    break;
+                }
+            }
+        }
+
         // Process each item in local cart
+        const conflictingItems = [];
+        const validItems = [];
+
         for (const localItem of localCart) {
             const { id: productId, quantity } = localItem;
             
             if (!productId || !quantity) continue;
 
-            // Verify product exists
-            const product = await Product.findById(productId);
-            if (!product) continue;
+            // Verify product exists and populate warehouse
+            const product = await Product.findById(productId).populate('warehouse');
+            if (!product || !product.warehouse) continue;
 
             // Check if item already exists in database cart
             const existingItemIndex = user.cart.findIndex(
@@ -228,16 +313,57 @@ const syncCart = async (req, res) => {
             );
 
             if (existingItemIndex > -1) {
-                // Update quantity (add local quantity to existing)
+                // Update quantity (add local quantity to existing) - no validation needed
                 user.cart[existingItemIndex].quantity += quantity;
+                validItems.push({ productId, quantity, action: 'updated' });
             } else {
-                // Add new item to cart
-                user.cart.push({
-                    productId,
-                    quantity,
-                    addedAt: new Date()
-                });
+                // Warehouse validation for new items
+                const currentProductWarehouse = product.warehouse;
+                const isCurrentProductGlobal = currentProductWarehouse.deliverySettings?.is24x7Delivery === true;
+
+                // Check for warehouse conflicts
+                if (!isCurrentProductGlobal && existingCustomWarehouse && 
+                    existingCustomWarehouse._id.toString() !== currentProductWarehouse._id.toString()) {
+                    conflictingItems.push({
+                        productId,
+                        productName: product.name,
+                        warehouseName: currentProductWarehouse.name,
+                        conflictsWith: existingCustomWarehouse.name
+                    });
+                } else {
+                    // Add new item to cart
+                    user.cart.push({
+                        productId,
+                        quantity,
+                        addedAt: new Date()
+                    });
+                    validItems.push({ productId, quantity, action: 'added' });
+
+                    // Update existing custom warehouse reference if this is a custom warehouse
+                    if (!isCurrentProductGlobal && !existingCustomWarehouse) {
+                        existingCustomWarehouse = currentProductWarehouse;
+                    }
+                }
             }
+        }
+
+        // If there are conflicting items, return partial success with warnings
+        if (conflictingItems.length > 0) {
+            await user.save();
+            
+            // Populate the cart for response
+            await user.populate({
+                path: 'cart.productId',
+                model: 'Product'
+            });
+
+            return res.status(207).json({ // 207 Multi-Status for partial success
+                message: 'Cart partially synced. Some items could not be added due to warehouse conflicts.',
+                cart: user.cart,
+                validItems,
+                conflictingItems,
+                warning: 'WAREHOUSE_CONFLICT'
+            });
         }
 
         await user.save();
