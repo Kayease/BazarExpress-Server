@@ -30,6 +30,19 @@ const userSchema = new mongoose.Schema({
             updatedAt: { type: Number, default: () => Date.now() }
         }
     ],
+    cart: [
+        {
+            productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+            quantity: { type: Number, required: true, min: 1 },
+            addedAt: { type: Date, default: Date.now }
+        }
+    ],
+    wishlist: [
+        {
+            productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+            addedAt: { type: Date, default: Date.now }
+        }
+    ],
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
     createdAt: { type: Date, default: Date.now },
 });

@@ -46,37 +46,50 @@ exports.sendOtp = async (req, res) => {
 };
 
 exports.verifyOtp = async (req, res) => {
-  const { phone, otp, sessionId } = req.body;
-  const record = otpStore[sessionId];
-  if (!record || record.phone !== phone || record.otp !== otp || Date.now() > record.expires) {
-    return res.status(400).json({ error: 'Invalid or expired OTP' });
-  }
-  delete otpStore[sessionId];
-  let user = await User.findOne({ phone });
-  if (!user) {
-    user = await User.create({
-      name: '',
-      email: '',
-      phone,
-      dateOfBirth: '',
-      address: [],
-      role: 'user',
-      status: 'active',
-    });
-  }
-  const token = generateToken(user);
-  // Format the response consistently with other auth endpoints
-  res.json({
-    token,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      dateOfBirth: user.dateOfBirth,
-      address: user.address || null,
-      status: user.status
+  try {
+    const { phone, otp, sessionId } = req.body;
+    const record = otpStore[sessionId];
+    if (!record || record.phone !== phone || record.otp !== otp || Date.now() > record.expires) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
-  });
+    delete otpStore[sessionId];
+    let user = await User.findOne({ phone });
+    if (!user) {
+      try {
+        user = await User.createUser({
+          name: '',
+          // Don't pass empty email - let the createUser method handle it
+          phone,
+          dateOfBirth: ''
+        });
+      } catch (err) {
+        // Handle MongoDB duplicate key errors
+        if (err.code === 11000) {
+          if (err.keyPattern && err.keyPattern.phone) {
+            return res.status(409).json({ message: 'A user with this phone number already exists. Please try a different phone number.' });
+          }
+          return res.status(409).json({ message: 'A user already exists with this information.' });
+        }
+        throw err;
+      }
+    }
+    const token = generateToken(user);
+    // Format the response consistently with other auth endpoints
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        dateOfBirth: user.dateOfBirth,
+        address: user.address || null,
+        status: user.status
+      }
+    });
+  } catch (err) {
+    console.error('OTP verification error:', err);
+    res.status(500).json({ message: 'Internal server error during verification' });
+  }
 }; 
