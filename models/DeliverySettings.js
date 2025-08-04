@@ -2,6 +2,14 @@ const mongoose = require('mongoose');
 const osrmService = require('../utils/osrmService');
 
 const deliverySettingsSchema = new mongoose.Schema({
+    // Warehouse type - to distinguish between custom and global warehouse settings
+    warehouseType: {
+        type: String,
+        enum: ['custom', 'global'],
+        required: true,
+        default: 'custom'
+    },
+    
     // Free delivery criteria
     freeDeliveryMinAmount: { 
         type: Number, 
@@ -83,11 +91,24 @@ const deliverySettingsSchema = new mongoose.Schema({
 });
 
 // Static methods for delivery calculations
-deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance, cartTotal, paymentMethod = 'online') {
-    const settings = await this.findOne({ isActive: true }).sort({ updatedAt: -1 });
+deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance, cartTotal, paymentMethod = 'online', warehouseType = 'custom') {
+    const settings = await this.findOne({ 
+        isActive: true, 
+        warehouseType: warehouseType 
+    }).sort({ updatedAt: -1 });
     
     if (!settings) {
-        throw new Error('Delivery settings not found');
+        // Fallback to custom warehouse settings if global not found
+        const fallbackSettings = await this.findOne({ 
+            isActive: true, 
+            warehouseType: 'custom' 
+        }).sort({ updatedAt: -1 });
+        
+        if (!fallbackSettings) {
+            throw new Error('Delivery settings not found');
+        }
+        
+        return this.calculateDeliveryCharge(distance, cartTotal, paymentMethod, 'custom');
     }
     
     let deliveryCharge = 0;
@@ -138,10 +159,30 @@ deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance
 
 // Calculate delivery charge with warehouse-specific settings
 deliverySettingsSchema.statics.calculateDeliveryChargeWithWarehouse = async function(distance, cartTotal, paymentMethod = 'online', warehouse) {
-    const settings = await this.findOne({ isActive: true }).sort({ updatedAt: -1 });
+    // Determine warehouse type based on is24x7Delivery field
+    const warehouseType = warehouse.deliverySettings?.is24x7Delivery ? 'global' : 'custom';
+    
+    const settings = await this.findOne({ 
+        isActive: true, 
+        warehouseType: warehouseType 
+    }).sort({ updatedAt: -1 });
     
     if (!settings) {
-        throw new Error('Delivery settings not found');
+        // Fallback to custom warehouse settings if global not found
+        const fallbackSettings = await this.findOne({ 
+            isActive: true, 
+            warehouseType: 'custom' 
+        }).sort({ updatedAt: -1 });
+        
+        if (!fallbackSettings) {
+            throw new Error('Delivery settings not found');
+        }
+        
+        // Use fallback settings
+        return this.calculateDeliveryChargeWithWarehouse(distance, cartTotal, paymentMethod, { 
+            ...warehouse, 
+            deliverySettings: { ...warehouse.deliverySettings, is24x7Delivery: false } 
+        });
     }
     
     let deliveryCharge = 0;
@@ -246,6 +287,83 @@ deliverySettingsSchema.statics.calculateDistance = async function(lat1, lon1, la
             route: null
         };
     }
+};
+
+// Calculate delivery charges for mixed warehouse orders (items from both custom and global warehouses)
+deliverySettingsSchema.statics.calculateMixedWarehouseDelivery = async function(customerLat, customerLng, cartItemsByWarehouse, paymentMethod = 'online', customerPincode = null) {
+    const Warehouse = require('./Warehouse');
+    const results = {};
+    let totalDeliveryCharge = 0;
+    
+    for (const [warehouseId, items] of Object.entries(cartItemsByWarehouse)) {
+        try {
+            // Get warehouse details
+            const warehouse = await Warehouse.findById(warehouseId);
+            if (!warehouse) {
+                console.warn(`Warehouse ${warehouseId} not found`);
+                continue;
+            }
+            
+            // Validate pincode for custom warehouses
+            if (!warehouse.deliverySettings.is24x7Delivery && customerPincode) {
+                const canDeliverToPincode = Array.isArray(warehouse.deliverySettings.deliveryPincodes) && 
+                                          warehouse.deliverySettings.deliveryPincodes.includes(customerPincode);
+                if (!canDeliverToPincode) {
+                    throw new Error(`${warehouse.name} does not deliver to pincode ${customerPincode}`);
+                }
+            }
+            
+            // Calculate distance using OSRM
+            const distanceResult = await this.calculateDistance(
+                warehouse.location.lat,
+                warehouse.location.lng,
+                customerLat,
+                customerLng,
+                'osrm'
+            );
+            
+            // Calculate subtotal for items from this warehouse
+            const warehouseSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            
+            // Calculate delivery charge for this warehouse
+            const deliveryInfo = await this.calculateDeliveryChargeWithWarehouse(
+                distanceResult.distance,
+                warehouseSubtotal,
+                paymentMethod,
+                warehouse
+            );
+            
+            results[warehouseId] = {
+                warehouse: {
+                    id: warehouse._id,
+                    name: warehouse.name,
+                    address: warehouse.address,
+                    type: warehouse.deliverySettings?.is24x7Delivery ? 'global' : 'custom'
+                },
+                items: items,
+                subtotal: warehouseSubtotal,
+                distance: distanceResult.distance,
+                duration: distanceResult.duration,
+                deliveryInfo: deliveryInfo,
+                calculationMethod: distanceResult.method
+            };
+            
+            totalDeliveryCharge += deliveryInfo.deliveryCharge;
+            
+        } catch (error) {
+            console.error(`Error calculating delivery for warehouse ${warehouseId}:`, error);
+            results[warehouseId] = {
+                error: error.message,
+                items: items
+            };
+        }
+    }
+    
+    return {
+        warehouseResults: results,
+        totalDeliveryCharge: totalDeliveryCharge,
+        hasErrors: Object.values(results).some(result => result.error)
+    };
 };
 
 // Instance methods

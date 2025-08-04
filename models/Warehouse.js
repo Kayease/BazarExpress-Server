@@ -292,8 +292,8 @@ warehouseSchema.statics.isWarehouseCurrentlyDelivering = function(warehouse, tim
 };
 
 // Find the best warehouse for delivery to a specific location using OSRM
-warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLat, customerLng) {
-    const warehouses = await this.find({ 
+warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLat, customerLng, customerPincode = null) {
+    let warehouses = await this.find({ 
         status: 'active',
         'deliverySettings.isDeliveryEnabled': true,
         'location.lat': { $exists: true },
@@ -302,6 +302,24 @@ warehouseSchema.statics.findBestWarehouseForDelivery = async function(customerLa
     
     if (warehouses.length === 0) {
         return null;
+    }
+    
+    // Filter warehouses based on pincode if provided
+    if (customerPincode) {
+        warehouses = warehouses.filter(warehouse => {
+            // 24x7 warehouses can deliver to any pincode
+            if (warehouse.deliverySettings.is24x7Delivery) {
+                return true;
+            }
+            // Custom warehouses must have the pincode in their delivery list
+            return Array.isArray(warehouse.deliverySettings.deliveryPincodes) && 
+                   warehouse.deliverySettings.deliveryPincodes.includes(customerPincode);
+        });
+        
+        if (warehouses.length === 0) {
+            console.log(`No warehouses found that can deliver to pincode ${customerPincode}`);
+            return null;
+        }
     }
     
     try {

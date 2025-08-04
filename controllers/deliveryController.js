@@ -5,7 +5,14 @@ const osrmService = require('../utils/osrmService');
 // Get current delivery settings
 const getDeliverySettings = async (req, res) => {
     try {
-        const settings = await DeliverySettings.findOne({ isActive: true })
+        const { warehouseType } = req.query;
+        
+        let query = { isActive: true };
+        if (warehouseType && ['custom', 'global'].includes(warehouseType)) {
+            query.warehouseType = warehouseType;
+        }
+        
+        const settings = await DeliverySettings.findOne(query)
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email')
             .sort({ updatedAt: -1 });
@@ -13,7 +20,7 @@ const getDeliverySettings = async (req, res) => {
         if (!settings) {
             return res.status(404).json({ 
                 success: false, 
-                error: 'Delivery settings not found' 
+                error: `Delivery settings not found${warehouseType ? ` for ${warehouseType} warehouses` : ''}` 
             });
         }
         
@@ -30,10 +37,46 @@ const getDeliverySettings = async (req, res) => {
     }
 };
 
+// Get all delivery settings (both custom and global)
+const getAllDeliverySettings = async (req, res) => {
+    try {
+        const customSettings = await DeliverySettings.findOne({ 
+            isActive: true, 
+            warehouseType: 'custom' 
+        })
+        .populate('createdBy', 'name email')
+        .populate('updatedBy', 'name email')
+        .sort({ updatedAt: -1 });
+        
+        const globalSettings = await DeliverySettings.findOne({ 
+            isActive: true, 
+            warehouseType: 'global' 
+        })
+        .populate('createdBy', 'name email')
+        .populate('updatedBy', 'name email')
+        .sort({ updatedAt: -1 });
+        
+        res.json({ 
+            success: true, 
+            settings: {
+                custom: customSettings,
+                global: globalSettings
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching all delivery settings:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to fetch delivery settings' 
+        });
+    }
+};
+
 // Create or update delivery settings
 const updateDeliverySettings = async (req, res) => {
     try {
         const {
+            warehouseType = 'custom',
             freeDeliveryMinAmount,
             freeDeliveryRadius,
             baseDeliveryCharge,
@@ -42,6 +85,14 @@ const updateDeliverySettings = async (req, res) => {
             perKmCharge,
             codExtraCharges
         } = req.body;
+
+        // Validate warehouse type
+        if (!['custom', 'global'].includes(warehouseType)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid warehouse type. Must be either "custom" or "global"'
+            });
+        }
 
         // Validation
         if (minimumDeliveryCharge > maximumDeliveryCharge) {
@@ -58,8 +109,11 @@ const updateDeliverySettings = async (req, res) => {
             });
         }
 
-        // Find existing active settings
-        let settings = await DeliverySettings.findOne({ isActive: true });
+        // Find existing active settings for this warehouse type
+        let settings = await DeliverySettings.findOne({ 
+            isActive: true, 
+            warehouseType: warehouseType 
+        });
 
         if (settings) {
             // Update existing settings
@@ -77,6 +131,7 @@ const updateDeliverySettings = async (req, res) => {
         } else {
             // Create new settings if none exist
             settings = new DeliverySettings({
+                warehouseType,
                 freeDeliveryMinAmount,
                 freeDeliveryRadius,
                 baseDeliveryCharge,
@@ -117,13 +172,25 @@ const calculateDeliveryCharge = async (req, res) => {
             customerLng, 
             warehouseId, 
             cartTotal, 
-            paymentMethod = 'online' 
+            paymentMethod = 'online',
+            customerPincode
         } = req.body;
+
+        console.log('\n========== DELIVERY CALCULATION START ==========');
+        console.log('Request data:', {
+            customerLat,
+            customerLng,
+            warehouseId,
+            cartTotal,
+            paymentMethod,
+            customerPincode
+        });
 
         if (!customerLat || !customerLng || !cartTotal) {
             return res.status(400).json({
                 success: false,
-                error: 'Customer location and cart total are required'
+                error: 'Customer location and cart total are required',
+                errorType: 'MISSING_REQUIRED_FIELDS'
             });
         }
 
@@ -136,8 +203,44 @@ const calculateDeliveryCharge = async (req, res) => {
             if (!warehouse || !warehouse.location) {
                 return res.status(404).json({
                     success: false,
-                    error: 'Warehouse not found or location not set'
+                    error: 'Warehouse not found or location not set',
+                    errorType: 'WAREHOUSE_NOT_FOUND'
                 });
+            }
+            
+            // Validate pincode for custom warehouses (non-24x7)
+            console.log('\n--- PINCODE VALIDATION ---');
+            console.log('Warehouse:', warehouse.name);
+            console.log('Is 24x7 delivery:', warehouse.deliverySettings.is24x7Delivery);
+            console.log('Customer pincode:', customerPincode);
+            console.log('Warehouse delivery pincodes:', warehouse.deliverySettings.deliveryPincodes);
+            
+            if (!warehouse.deliverySettings.is24x7Delivery && customerPincode) {
+                const canDeliverToPincode = Array.isArray(warehouse.deliverySettings.deliveryPincodes) && 
+                                          warehouse.deliverySettings.deliveryPincodes.includes(customerPincode);
+                console.log('Can deliver to pincode:', canDeliverToPincode);
+                
+                if (!canDeliverToPincode) {
+                    console.log('PINCODE VALIDATION FAILED - Returning error');
+                    return res.status(400).json({
+                        success: false,
+                        error: `Delivery not available to pincode ${customerPincode}. Please check if this pincode is covered by our delivery network or try a different address.`,
+                        errorType: 'PINCODE_NOT_SUPPORTED',
+                        warehouse: {
+                            id: warehouse._id,
+                            name: warehouse.name,
+                            address: warehouse.address,
+                            type: 'custom'
+                        },
+                        customerPincode: customerPincode,
+                        supportedPincodes: warehouse.deliverySettings.deliveryPincodes || []
+                    });
+                }
+                console.log('PINCODE VALIDATION PASSED');
+            } else if (!warehouse.deliverySettings.is24x7Delivery && !customerPincode) {
+                console.log('WARNING: Custom warehouse but no pincode provided');
+            } else {
+                console.log('SKIPPING PINCODE VALIDATION (24x7 warehouse or no pincode)');
             }
             
             // Check if warehouse can deliver to this location using OSRM
@@ -154,6 +257,7 @@ const calculateDeliveryCharge = async (req, res) => {
                 return res.status(400).json({
                     success: false,
                     error: `Delivery not available to this location from ${warehouse.name}. Maximum delivery radius is ${warehouse.deliverySettings.maxDeliveryRadius} km, but your location is ${distance.toFixed(2)} km away.`,
+                    errorType: 'DELIVERY_RADIUS_EXCEEDED',
                     distance: Math.round(distance * 100) / 100,
                     maxRadius: warehouse.deliverySettings.maxDeliveryRadius,
                     warehouse: {
@@ -167,11 +271,14 @@ const calculateDeliveryCharge = async (req, res) => {
             selectedWarehouse = warehouse;
         } else {
             // Find the best warehouse automatically
-            const result = await Warehouse.findBestWarehouseForDelivery(customerLat, customerLng);
+            const result = await Warehouse.findBestWarehouseForDelivery(customerLat, customerLng, customerPincode);
             if (!result) {
                 return res.status(400).json({
                     success: false,
-                    error: 'No warehouse available for delivery to this location'
+                    error: customerPincode ? 
+                        `No warehouse available for delivery to pincode ${customerPincode}. Please check if this pincode is covered by our delivery network or try a different address.` :
+                        'No warehouse available for delivery to this location',
+                    errorType: 'NO_WAREHOUSE_AVAILABLE'
                 });
             }
             
@@ -184,7 +291,8 @@ const calculateDeliveryCharge = async (req, res) => {
         if (!settings) {
             return res.status(404).json({
                 success: false,
-                error: 'Delivery settings not configured'
+                error: 'Delivery settings not configured',
+                errorType: 'DELIVERY_SETTINGS_NOT_FOUND'
             });
         }
 
@@ -337,10 +445,72 @@ const getOSRMStatus = async (req, res) => {
     }
 };
 
+// Calculate delivery charges for mixed warehouse orders
+const calculateMixedWarehouseDelivery = async (req, res) => {
+    try {
+        const { 
+            customerLat, 
+            customerLng, 
+            cartItemsByWarehouse, 
+            paymentMethod = 'online',
+            customerPincode
+        } = req.body;
+
+        console.log('\n========== MIXED WAREHOUSE DELIVERY CALCULATION START ==========');
+        console.log('Request data:', {
+            customerLat,
+            customerLng,
+            cartItemsByWarehouse: Object.keys(cartItemsByWarehouse || {}),
+            paymentMethod,
+            customerPincode
+        });
+
+        if (!customerLat || !customerLng || !cartItemsByWarehouse) {
+            return res.status(400).json({
+                success: false,
+                error: 'Customer location and cart items by warehouse are required'
+            });
+        }
+
+        // Validate cartItemsByWarehouse format
+        if (typeof cartItemsByWarehouse !== 'object' || Object.keys(cartItemsByWarehouse).length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cart items by warehouse must be a non-empty object'
+            });
+        }
+
+        const result = await DeliverySettings.calculateMixedWarehouseDelivery(
+            customerLat,
+            customerLng,
+            cartItemsByWarehouse,
+            paymentMethod,
+            customerPincode
+        );
+
+        if (result.hasErrors) {
+            console.warn('Some warehouses had calculation errors:', result);
+        }
+
+        res.json({
+            success: true,
+            ...result
+        });
+    } catch (error) {
+        console.error('Error calculating mixed warehouse delivery:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to calculate mixed warehouse delivery'
+        });
+    }
+};
+
 module.exports = {
     getDeliverySettings,
+    getAllDeliverySettings,
     updateDeliverySettings,
     calculateDeliveryCharge,
+    calculateMixedWarehouseDelivery,
     getDeliverySettingsHistory,
     initializeDeliverySettings,
     getOSRMStatus
