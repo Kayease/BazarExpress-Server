@@ -22,6 +22,8 @@ const newsletterRoutes = require("./routes/newsletterRoutes");
 const deliveryRoutes = require("./routes/deliveryRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const invoiceSettingsRoutes = require("./routes/invoiceSettingsRoutes");
 const noticeController = require("./controllers/noticeController");
 
 const app = express();
@@ -72,6 +74,8 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/wishlist", wishlistRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/invoice-settings", invoiceSettingsRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
 

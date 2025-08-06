@@ -173,7 +173,8 @@ const calculateDeliveryCharge = async (req, res) => {
             warehouseId, 
             cartTotal, 
             paymentMethod = 'online',
-            customerPincode
+            customerPincode,
+            cartItems // Add cart items to determine which warehouses to validate
         } = req.body;
 
         console.log('\n========== DELIVERY CALCULATION START ==========');
@@ -183,7 +184,8 @@ const calculateDeliveryCharge = async (req, res) => {
             warehouseId,
             cartTotal,
             paymentMethod,
-            customerPincode
+            customerPincode,
+            cartItemsCount: cartItems ? cartItems.length : 0
         });
 
         if (!customerLat || !customerLng || !cartTotal) {
@@ -270,20 +272,104 @@ const calculateDeliveryCharge = async (req, res) => {
             
             selectedWarehouse = warehouse;
         } else {
-            // Find the best warehouse automatically
-            const result = await Warehouse.findBestWarehouseForDelivery(customerLat, customerLng, customerPincode);
-            if (!result) {
-                return res.status(400).json({
-                    success: false,
-                    error: customerPincode ? 
-                        `No warehouse available for delivery to pincode ${customerPincode}. Please check if this pincode is covered by our delivery network or try a different address.` :
-                        'No warehouse available for delivery to this location',
-                    errorType: 'NO_WAREHOUSE_AVAILABLE'
+            // If no specific warehouse ID provided, find warehouses based on cart items
+            if (cartItems && Array.isArray(cartItems) && cartItems.length > 0) {
+                console.log('\n--- CART-BASED WAREHOUSE SELECTION ---');
+                
+                // Get unique warehouse IDs from cart items
+                const cartWarehouseIds = [...new Set(cartItems.map(item => 
+                    item.warehouseId || item.warehouse?._id || item.warehouse?.id
+                ).filter(Boolean))];
+                
+                console.log('Cart warehouse IDs:', cartWarehouseIds);
+                
+                if (cartWarehouseIds.length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Cart items must have valid warehouse information',
+                        errorType: 'MISSING_WAREHOUSE_INFO'
+                    });
+                }
+                
+                // Get warehouses from cart
+                const cartWarehouses = await Warehouse.find({
+                    _id: { $in: cartWarehouseIds },
+                    'location.lat': { $exists: true },
+                    'location.lng': { $exists: true }
                 });
+                
+                console.log('Found cart warehouses:', cartWarehouses.length);
+                
+                // Filter warehouses based on pincode validation
+                const validWarehouses = [];
+                for (const warehouse of cartWarehouses) {
+                    console.log(`\nChecking warehouse: ${warehouse.name}`);
+                    console.log('Is 24x7:', warehouse.deliverySettings.is24x7Delivery);
+                    console.log('Warehouse pincodes:', warehouse.deliverySettings.deliveryPincodes);
+                    
+                    // For custom warehouses, validate pincode
+                    if (!warehouse.deliverySettings.is24x7Delivery && customerPincode) {
+                        const canDeliverToPincode = Array.isArray(warehouse.deliverySettings.deliveryPincodes) && 
+                                                  warehouse.deliverySettings.deliveryPincodes.includes(customerPincode);
+                        console.log(`Pincode ${customerPincode} validation for ${warehouse.name}:`, canDeliverToPincode);
+                        console.log('Warehouse pincode list:', warehouse.deliverySettings.deliveryPincodes);
+                        
+                        if (canDeliverToPincode) {
+                            console.log(`✓ ${warehouse.name} can deliver to pincode ${customerPincode}`);
+                            validWarehouses.push(warehouse);
+                        } else {
+                            console.log(`✗ ${warehouse.name} cannot deliver to pincode ${customerPincode}`);
+                        }
+                    } else if (warehouse.deliverySettings.is24x7Delivery) {
+                        // Global warehouses can deliver anywhere
+                        console.log(`✓ ${warehouse.name} is a global warehouse (24x7) - can deliver anywhere`);
+                        validWarehouses.push(warehouse);
+                    } else {
+                        console.log(`⚠ ${warehouse.name} is custom warehouse but no pincode provided`);
+                    }
+                }
+                
+                console.log('Valid warehouses after pincode check:', validWarehouses.length);
+                
+                if (validWarehouses.length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: customerPincode ? 
+                            `No warehouse from your cart can deliver to pincode ${customerPincode}. Please check if this pincode is covered by our delivery network or try a different address.` :
+                            'No warehouse from your cart can deliver to this location',
+                        errorType: 'NO_CART_WAREHOUSE_AVAILABLE'
+                    });
+                }
+                
+                // Find the nearest valid warehouse using OSRM
+                const result = await osrmService.findNearestWarehouse(customerLat, customerLng, validWarehouses);
+                if (!result) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Unable to calculate delivery distance to any warehouse from your cart',
+                        errorType: 'DISTANCE_CALCULATION_FAILED'
+                    });
+                }
+                
+                selectedWarehouse = result.warehouse;
+                distance = result.distance;
+                
+            } else {
+                // Fallback to original logic for backward compatibility
+                const result = await Warehouse.findBestWarehouseForDelivery(customerLat, customerLng, customerPincode);
+                if (!result) {
+                    return res.status(400).json({
+                        success: false,
+                        error: customerPincode ? 
+                            `No warehouse available for delivery to pincode ${customerPincode}. Please check if this pincode is covered by our delivery network or try a different address.` :
+                            'No warehouse available for delivery to this location',
+                        errorType: 'NO_WAREHOUSE_AVAILABLE'
+                    });
+                }
+                
+                selectedWarehouse = result.warehouse;
+                distance = result.distance;
             }
-            
-            selectedWarehouse = result.warehouse;
-            distance = result.distance;
         }
 
         // Get delivery settings

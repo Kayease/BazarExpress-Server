@@ -8,10 +8,24 @@ const getCart = async (req, res) => {
         const user = await User.findById(req.user.id).populate({
             path: 'cart.productId',
             model: 'Product',
-            populate: {
-                path: 'tax',
-                model: 'Tax'
-            }
+            populate: [
+                {
+                    path: 'tax',
+                    model: 'Tax'
+                },
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                },
+                {
+                    path: 'warehouse',
+                    model: 'Warehouse'
+                }
+            ]
         });
 
         if (!user) {
@@ -128,7 +142,25 @@ const addToCart = async (req, res) => {
         // Populate the cart for response
         await user.populate({
             path: 'cart.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'tax',
+                    model: 'Tax'
+                },
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                },
+                {
+                    path: 'warehouse',
+                    model: 'Warehouse'
+                }
+            ]
         });
 
         res.json({ 
@@ -180,7 +212,25 @@ const updateCartItem = async (req, res) => {
         // Populate the cart for response
         await user.populate({
             path: 'cart.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'tax',
+                    model: 'Tax'
+                },
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                },
+                {
+                    path: 'warehouse',
+                    model: 'Warehouse'
+                }
+            ]
         });
 
         res.json({ 
@@ -221,7 +271,25 @@ const removeFromCart = async (req, res) => {
         // Populate the cart for response
         await user.populate({
             path: 'cart.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'tax',
+                    model: 'Tax'
+                },
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                },
+                {
+                    path: 'warehouse',
+                    model: 'Warehouse'
+                }
+            ]
         });
 
         res.json({ 
@@ -309,13 +377,19 @@ const syncCart = async (req, res) => {
 
             // Check if item already exists in database cart
             const existingItemIndex = user.cart.findIndex(
-                item => item.productId.toString() === productId
+                item => {
+                    // Handle both populated and non-populated productId
+                    const itemProductId = item.productId._id ? item.productId._id.toString() : item.productId.toString();
+                    return itemProductId === productId.toString();
+                }
             );
 
             if (existingItemIndex > -1) {
-                // Update quantity (add local quantity to existing) - no validation needed
-                user.cart[existingItemIndex].quantity += quantity;
-                validItems.push({ productId, quantity, action: 'updated' });
+                // Update quantity to the maximum of existing and local quantity
+                const existingQuantity = user.cart[existingItemIndex].quantity;
+                const newQuantity = Math.max(existingQuantity, quantity);
+                user.cart[existingItemIndex].quantity = newQuantity;
+                validItems.push({ productId, quantity: newQuantity, action: 'updated' });
             } else {
                 // Warehouse validation for new items
                 const currentProductWarehouse = product.warehouse;
@@ -354,7 +428,25 @@ const syncCart = async (req, res) => {
             // Populate the cart for response
             await user.populate({
                 path: 'cart.productId',
-                model: 'Product'
+                model: 'Product',
+                populate: [
+                    {
+                        path: 'tax',
+                        model: 'Tax'
+                    },
+                    {
+                        path: 'category',
+                        model: 'Category'
+                    },
+                    {
+                        path: 'brand',
+                        model: 'Brand'
+                    },
+                    {
+                        path: 'warehouse',
+                        model: 'Warehouse'
+                    }
+                ]
             });
 
             return res.status(207).json({ // 207 Multi-Status for partial success
@@ -371,7 +463,25 @@ const syncCart = async (req, res) => {
         // Populate the cart for response
         await user.populate({
             path: 'cart.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'tax',
+                    model: 'Tax'
+                },
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                },
+                {
+                    path: 'warehouse',
+                    model: 'Warehouse'
+                }
+            ]
         });
 
         res.json({ 
