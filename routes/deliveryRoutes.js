@@ -10,7 +10,7 @@ const {
     initializeDeliverySettings,
     getOSRMStatus
 } = require('../controllers/deliveryController');
-const { isAuth, isAdmin } = require('../middleware/authMiddleware');
+const { isAuth, isAdmin, hasPermission, canAccessSection } = require('../middleware/authMiddleware');
 
 // Public routes
 router.post('/calculate', calculateDeliveryCharge);
@@ -19,9 +19,26 @@ router.get('/settings', getDeliverySettings);
 router.get('/settings/all', getAllDeliverySettings);
 router.get('/osrm/status', getOSRMStatus);
 
-// Admin routes
-router.post('/initialize', isAuth, isAdmin, initializeDeliverySettings);
-router.put('/settings', isAuth, isAdmin, updateDeliverySettings);
-router.get('/settings/history', isAuth, isAdmin, getDeliverySettingsHistory);
+// Admin routes (admin and report_finance_analyst)
+router.post('/initialize', 
+    isAuth, 
+    hasPermission(['admin', 'report_finance_analyst']), 
+    canAccessSection('delivery'),
+    initializeDeliverySettings
+);
+
+router.put('/settings', 
+    isAuth, 
+    hasPermission(['admin', 'report_finance_analyst']), 
+    canAccessSection('delivery'),
+    updateDeliverySettings
+);
+
+router.get('/settings/history', 
+    isAuth, 
+    hasPermission(['admin', 'report_finance_analyst']), 
+    canAccessSection('delivery'),
+    getDeliverySettingsHistory
+);
 
 module.exports = router;

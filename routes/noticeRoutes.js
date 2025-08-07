@@ -1,25 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const noticeController = require('../controllers/noticeController');
-const { isAuth, isAdmin } = require('../middleware/authMiddleware');
+const { isAuth, isAdmin, hasPermission, canAccessSection } = require('../middleware/authMiddleware');
 
 // Public: Get the currently active notice
 router.get('/active', noticeController.getActiveNotice);
 
-// Admin: Get all notices
-router.get('/', isAuth, isAdmin, noticeController.getAllNotices);
+// Admin routes - Allow admin and marketing_content_manager
+router.get('/', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.getAllNotices);
 
 // Admin: Create a new notice
-router.post('/', isAuth, isAdmin, noticeController.createNotice);
+router.post('/', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.createNotice);
 
 // Admin: Update a notice
-router.patch('/:id', isAuth, isAdmin, noticeController.updateNotice);
+router.patch('/:id', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.updateNotice);
 
 // Admin: Delete a notice
-router.delete('/:id', isAuth, isAdmin, noticeController.deleteNotice);
+router.delete('/:id', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.deleteNotice);
 
 // Admin: Manually trigger auto-activation
-router.post('/auto-activate', isAuth, isAdmin, async (req, res) => {
+router.post('/auto-activate', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), async (req, res) => {
   try {
     await noticeController.autoActivateNotices();
     res.json({ success: true, message: 'Auto-activation completed' });

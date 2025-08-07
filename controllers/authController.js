@@ -119,9 +119,8 @@ async function updateProfile(req, res, next) {
 
 async function getAllUsers(req, res, next) {
     try {
-        if (!req.user || req.user.role !== 'admin') {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+        // Permission check is handled by middleware (hasPermission and canAccessSection)
+        // Allow both admin and customer_support_executive roles
         const users = await User.find({});
         res.json(users.map(u => ({
             id: u._id,
@@ -180,17 +179,36 @@ async function updateUserRole(req, res, next) {
 
 async function updateUserStatus(req, res, next) {
     try {
-        if (!req.user || req.user.role !== 'admin') {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+        // Permission check is handled by middleware (hasPermission and canAccessSection)
+        // Allow both admin and customer_support_executive roles
         const userId = req.params.id;
         const { status } = req.body;
+        
+        // Validate status
         if (!['active', 'disabled'].includes(status)) {
             return res.status(400).json({ error: 'Invalid status' });
         }
-        const user = await User.findByIdAndUpdate(userId, { status }, { new: true });
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        res.json({ success: true, status: user.status });
+        
+        // Get the target user first to check their role
+        const targetUser = await User.findById(userId);
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Role-based restrictions
+        if (req.user.role === 'customer_support_executive') {
+            // Customer Support Executive can only change status of regular customers (role: 'user')
+            if (targetUser.role !== 'user') {
+                return res.status(403).json({ 
+                    error: 'Customer Support Executive can only change status of regular customers, not admin users' 
+                });
+            }
+        }
+        // Admin can change status of any user (no additional restrictions)
+        
+        // Update the user status
+        const updatedUser = await User.findByIdAndUpdate(userId, { status }, { new: true });
+        res.json({ success: true, status: updatedUser.status });
     } catch (err) {
         next(err);
     }
