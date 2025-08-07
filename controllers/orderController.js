@@ -47,6 +47,13 @@ const createOrder = async (req, res) => {
     // Generate unique order ID
     const orderId = Order.generateOrderId();
 
+    // Set initial payment status based on payment method
+    const initialPaymentStatus = paymentInfo.method === 'cod' ? 'pending' : 'prepaid';
+    const updatedPaymentInfo = {
+      ...paymentInfo,
+      status: initialPaymentStatus
+    };
+
     // Create the order
     const order = new Order({
       orderId,
@@ -57,7 +64,7 @@ const createOrder = async (req, res) => {
       promoCode,
       taxCalculation,
       deliveryInfo,
-      paymentInfo,
+      paymentInfo: updatedPaymentInfo,
       warehouseInfo,
       notes,
       status: 'new'
@@ -83,7 +90,9 @@ const createOrder = async (req, res) => {
     // Populate the order with product details
     const populatedOrder = await Order.findById(order._id)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand');
+      .populate('items.productId', 'name price image category brand')
+      .populate('items.brandId', 'name')
+      .populate('items.categoryId', 'name');
 
     res.status(201).json({
       success: true,
@@ -118,7 +127,9 @@ const getUserOrders = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand');
+      .populate('items.productId', 'name price image category brand')
+      .populate('items.brandId', 'name')
+      .populate('items.categoryId', 'name');
 
     const totalOrders = await Order.countDocuments({ userId });
 
@@ -156,6 +167,11 @@ const getAllOrders = async (req, res) => {
     // Build query
     let query = {};
     
+    // For warehouse-specific roles, filter by assigned warehouses
+    if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+      query['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
+    }
+    
     if (status && status !== 'all') {
       query.status = status;
     }
@@ -174,7 +190,9 @@ const getAllOrders = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand');
+      .populate('items.productId', 'name price image category brand')
+      .populate('items.brandId', 'name')
+      .populate('items.categoryId', 'name');
 
     const totalOrders = await Order.countDocuments(query);
 
@@ -235,6 +253,8 @@ const getOrderById = async (req, res) => {
     const order = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
       .populate('items.productId', 'name price image category brand')
+      .populate('items.brandId', 'name')
+      .populate('items.categoryId', 'name')
       .populate('statusHistory.updatedBy', 'name email');
 
     if (!order) {
@@ -283,6 +303,17 @@ const updateOrderStatus = async (req, res) => {
 
     // Add status history
     order.addStatusHistory(status, req.user.id, note);
+
+    // Update payment status based on order status and payment method
+    if (status === 'cancelled' || status === 'refunded') {
+      order.paymentInfo.status = 'refunded';
+    } else if (status === 'delivered' && order.paymentInfo.method === 'cod') {
+      order.paymentInfo.status = 'paid';
+    } else if (order.paymentInfo.method === 'cod') {
+      order.paymentInfo.status = 'pending';
+    } else if (order.paymentInfo.method === 'online') {
+      order.paymentInfo.status = 'prepaid';
+    }
 
     // Update tracking information if provided
     if (trackingNumber) order.tracking.trackingNumber = trackingNumber;
@@ -346,6 +377,9 @@ const cancelOrder = async (req, res) => {
       cancelledBy: req.user.id
     };
 
+    // Update payment status to refunded when order is cancelled
+    order.paymentInfo.status = 'refunded';
+
     await order.save();
 
     res.json({
@@ -376,14 +410,24 @@ const getOrdersByStatus = async (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const orders = await Order.find({ status })
+    // Build query with warehouse filtering for specific roles
+    let query = { status };
+    
+    // For warehouse-specific roles, filter by assigned warehouses
+    if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+      query['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
+    }
+
+    const orders = await Order.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand');
+      .populate('items.productId', 'name price image category brand')
+      .populate('items.brandId', 'name')
+      .populate('items.categoryId', 'name');
 
-    const totalOrders = await Order.countDocuments({ status });
+    const totalOrders = await Order.countDocuments(query);
 
     res.json({
       success: true,

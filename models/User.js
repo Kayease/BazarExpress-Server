@@ -3,7 +3,23 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
     name: { type: String, required: false, default: "" },
     email: { type: String, required: false, unique: true, sparse: true },
-    role: { type: String, default: 'user' },
+    role: { 
+        type: String, 
+        enum: [
+            'user', 
+            'admin', 
+            'product_inventory_management', 
+            'order_warehouse_management', 
+            'marketing_content_manager', 
+            'customer_support_executive', 
+            'report_finance_analyst'
+        ], 
+        default: 'user' 
+    },
+    assignedWarehouses: [{ 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'Warehouse' 
+    }],
     phone: { type: String, default: '' },
     dateOfBirth: { type: String, default: '' },
     address: [

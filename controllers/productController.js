@@ -83,7 +83,20 @@ function extractPublicIdFromUrl(url) {
 exports.createProduct = async(req, res) => {
     try {
         // Process received product data
-        let { image, category, sku } = req.body;
+        let { image, category, sku, warehouse } = req.body;
+        
+        // For product_inventory_management role, restrict to assigned warehouses
+        if (req.user.role === 'product_inventory_management') {
+            if (!req.assignedWarehouseIds || req.assignedWarehouseIds.length === 0) {
+                return res.status(403).json({ error: 'No warehouses assigned to this user' });
+            }
+            
+            // Ensure the warehouse is one of the assigned warehouses
+            if (!req.assignedWarehouseIds.includes(warehouse)) {
+                return res.status(403).json({ error: 'Cannot create product in unassigned warehouse' });
+            }
+        }
+        
         let imageUrl = image;
         // Get category slug for folder structure
         let categorySlug = '';
@@ -94,7 +107,12 @@ exports.createProduct = async(req, res) => {
         if (image && image.startsWith('data:')) {
             imageUrl = await uploadProductImageToCloudinary(image, categorySlug, sku || 'no-sku');
         }
+        
         const productFields = getProductFields({ ...req.body, image: imageUrl });
+        
+        // Add creator information for tracking
+        productFields.createdBy = req.user._id;
+        
         const product = await Product.create(productFields);
         res.status(201).json(product);
     } catch (err) {
@@ -107,6 +125,11 @@ exports.getProducts = async (req, res) => {
     try {
         const { category, subcategory } = req.query;
         let query = {};
+        
+        // For product_inventory_management role, filter by assigned warehouses
+        if (req.user && req.user.role === 'product_inventory_management' && req.assignedWarehouseIds) {
+            query.warehouse = { $in: req.assignedWarehouseIds };
+        }
         
         // Add category filter if provided
         if (category) {
@@ -123,7 +146,8 @@ exports.getProducts = async (req, res) => {
             .populate('subcategory')
             .populate('brand')
             .populate('warehouse')
-            .populate('tax');
+            .populate('tax')
+            .populate('createdBy', 'name email');
 
         res.json(products);
     } catch (err) {
@@ -136,13 +160,22 @@ exports.getProductsPaginated = async (req, res) => {
     try {
         const { search = '', page = 1, limit = 20 } = req.query;
         const query = {};
+        
         if (search) {
             query.name = { $regex: search, $options: 'i' };
         }
+        
+        // For product_inventory_management role, filter by assigned warehouses
+        if (req.user && req.user.role === 'product_inventory_management' && req.assignedWarehouseIds) {
+            query.warehouse = { $in: req.assignedWarehouseIds };
+        }
+        
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const products = await Product.find(query)
             .populate('brand')
             .populate('category')
+            .populate('warehouse')
+            .populate('tax')
             .skip(skip)
             .limit(parseInt(limit));
         const total = await Product.countDocuments(query);
@@ -174,9 +207,29 @@ exports.getProductById = async(req, res) => {
 
 exports.updateProduct = async(req, res) => {
     try {
+        // First, find the existing product to check warehouse access
+        const existingProduct = await Product.findById(req.params.id);
+        if (!existingProduct) return res.status(404).json({ error: 'Product not found' });
+        
+        // For product_inventory_management role, check warehouse access
+        if (req.user.role === 'product_inventory_management') {
+            if (!req.assignedWarehouseIds || req.assignedWarehouseIds.length === 0) {
+                return res.status(403).json({ error: 'No warehouses assigned to this user' });
+            }
+            
+            // Check if the existing product's warehouse is in assigned warehouses
+            if (!req.assignedWarehouseIds.includes(existingProduct.warehouse.toString())) {
+                return res.status(403).json({ error: 'Cannot edit product from unassigned warehouse' });
+            }
+            
+            // If warehouse is being changed, ensure new warehouse is also assigned
+            if (req.body.warehouse && !req.assignedWarehouseIds.includes(req.body.warehouse)) {
+                return res.status(403).json({ error: 'Cannot move product to unassigned warehouse' });
+            }
+        }
+        
         const productFields = getProductFields(req.body);
         const product = await Product.findByIdAndUpdate(req.params.id, productFields, { new: true });
-        if (!product) return res.status(404).json({ error: 'Product not found' });
         res.json(product);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -187,6 +240,18 @@ exports.deleteProduct = async(req, res) => {
     try {
         const product = await Product.findById(req.params.id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
+        
+        // For product_inventory_management role, check warehouse access
+        if (req.user.role === 'product_inventory_management') {
+            if (!req.assignedWarehouseIds || req.assignedWarehouseIds.length === 0) {
+                return res.status(403).json({ error: 'No warehouses assigned to this user' });
+            }
+            
+            // Check if the product's warehouse is in assigned warehouses
+            if (!req.assignedWarehouseIds.includes(product.warehouse.toString())) {
+                return res.status(403).json({ error: 'Cannot delete product from unassigned warehouse' });
+            }
+        }
         // Delete main image
         let mainImagePublicId = product.image && product.image.public_id ? product.image.public_id : extractPublicIdFromUrl(product.image);
         if (mainImagePublicId) {

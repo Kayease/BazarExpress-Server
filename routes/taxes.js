@@ -1,16 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const taxesController = require('../controllers/taxesController');
+const { isAuth, hasPermission, canAccessSection } = require('../middleware/authMiddleware');
 
-// GET all taxes
+// Public routes (for product calculations)
 router.get('/', taxesController.getAllTaxes);
-// GET a single tax by ID
 router.get('/:id', taxesController.getTaxById);
-// POST create a new tax
-router.post('/', taxesController.createTax);
-// PUT update a tax by ID
-router.put('/:id', taxesController.updateTax);
-// DELETE a tax by ID
-router.delete('/:id', taxesController.deleteTax);
+
+// Admin routes with role-based access
+router.post('/', 
+    isAuth, 
+    hasPermission(['admin', 'report_finance_analyst']),
+    canAccessSection('taxes'),
+    taxesController.createTax
+);
+
+router.put('/:id', 
+    isAuth, 
+    hasPermission(['admin', 'report_finance_analyst']),
+    canAccessSection('taxes'),
+    taxesController.updateTax
+);
+
+router.delete('/:id', 
+    isAuth, 
+    hasPermission(['admin', 'report_finance_analyst']),
+    canAccessSection('taxes'),
+    taxesController.deleteTax
+);
 
 module.exports = router;

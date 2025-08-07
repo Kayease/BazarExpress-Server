@@ -119,7 +119,7 @@ const orderSchema = new mongoose.Schema({
   paymentInfo: {
     method: { type: String, enum: ['cod', 'online'], required: true },
     paymentMethod: { type: String }, // upi, card, wallet, netbanking for online payments
-    status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'prepaid', 'paid', 'refunded'], default: 'pending' },
     transactionId: { type: String },
     paidAt: { type: Date }
   },

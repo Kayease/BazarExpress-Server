@@ -63,7 +63,11 @@ exports.getWarehouses = async(req, res, next) => {
     try {
         const { userId } = req.query;
         let warehouses;
-        if (userId) {
+        
+        // For order_warehouse_management role, only return assigned warehouses
+        if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+            warehouses = await Warehouse.find({ _id: { $in: req.assignedWarehouseIds } });
+        } else if (userId) {
             warehouses = await Warehouse.getWarehousesByUser(userId);
         } else {
             warehouses = await Warehouse.find(); // Return all warehouses if no userId
@@ -115,6 +119,13 @@ exports.checkWarehouseProducts = async(req, res, next) => {
 exports.deleteWarehouse = async(req, res, next) => {
     try {
         const { id } = req.params;
+        
+        // Check role permissions - order_warehouse_management cannot delete warehouses
+        if (req.user && req.user.role === 'order_warehouse_management') {
+            return res.status(403).json({
+                error: "You do not have permission to delete warehouses"
+            });
+        }
         
         // Check if warehouse exists
         const warehouse = await Warehouse.findById(id);

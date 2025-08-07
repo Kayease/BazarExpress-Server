@@ -24,6 +24,7 @@ const cartRoutes = require("./routes/cartRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const invoiceSettingsRoutes = require("./routes/invoiceSettingsRoutes");
+const adminUserRoutes = require("./routes/adminUserRoutes");
 const noticeController = require("./controllers/noticeController");
 
 const app = express();
@@ -35,6 +36,7 @@ const allowedOrigins = [
   'http://localhost:1000',
   'http://localhost:3000',
   'https://bazar.sparkshift.digital',
+  'https://www.bazar.sparkshift.digital',
   // Add more if needed
 ];
 
@@ -76,6 +78,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/invoice-settings", invoiceSettingsRoutes);
+app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
 

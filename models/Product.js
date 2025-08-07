@@ -50,6 +50,7 @@ const productSchema = new mongoose.Schema({
     mrp: { type: Number, default: 0 },
     variants: { type: Object, default: {} },
     attributes: [{ name: String, values: [String] }],
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", productSchema);

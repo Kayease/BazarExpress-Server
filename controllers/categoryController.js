@@ -69,7 +69,19 @@ async function createCategory(req, res) {
         if (thumbnail && thumbnail.startsWith('data:')) {
             thumbnail = await uploadThumbnailToCloudinary(thumbnail, slug || name);
         }
-        const category = await Category.create({ name, parentId, hide, popular, icon, description, sortOrder, slug, thumbnail, showOnHome });
+        const category = await Category.create({ 
+            name, 
+            parentId, 
+            hide, 
+            popular, 
+            icon, 
+            description, 
+            sortOrder, 
+            slug, 
+            thumbnail, 
+            showOnHome,
+            createdBy: req.user._id
+        });
         res.status(201).json(category);
     } catch (err) {
         res.status(500).json({ error: 'Failed to create category' });
@@ -82,13 +94,23 @@ async function updateCategory(req, res) {
         const { id } = req.params;
         let { name, parentId = '', hide = false, popular = false, icon = 'Box', description = '', sortOrder = 0, slug = '', thumbnail = '', showOnHome = false } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
+        
+        // Get the existing category to check ownership and thumbnail
+        const existingCategory = await Category.findById(id);
+        if (!existingCategory) return res.status(404).json({ error: 'Category not found' });
+        
+        // For product_inventory_management role, check ownership
+        if (req.user.role === 'product_inventory_management') {
+            if (!existingCategory.createdBy || existingCategory.createdBy.toString() !== req.user._id.toString()) {
+                return res.status(403).json({ error: "You can only edit categories you created" });
+            }
+        }
+        
         // Check for unique sortOrder (exclude self)
         const existingSortOrder = await Category.findOne({ sortOrder, _id: { $ne: id } });
         if (existingSortOrder) {
             return res.status(400).json({ error: 'Sort order must be unique. Another category already has this value.' });
         }
-        // Get the existing category to check if we need to delete old thumbnail
-        const existingCategory = await Category.findById(id);
         
         if (thumbnail && thumbnail.startsWith('data:')) {
             // Delete old thumbnail if it exists
@@ -109,6 +131,18 @@ async function updateCategory(req, res) {
 async function deleteCategory(req, res) {
     try {
         const { id } = req.params;
+        
+        // Get the category first to check ownership and access its thumbnail
+        const category = await Category.findById(id);
+        if (!category) return res.status(404).json({ error: 'Category not found' });
+        
+        // For product_inventory_management role, check ownership
+        if (req.user.role === 'product_inventory_management') {
+            if (!category.createdBy || category.createdBy.toString() !== req.user._id.toString()) {
+                return res.status(403).json({ error: "You can only delete categories you created" });
+            }
+        }
+        
         // Check if any product exists under this category (either as main category or subcategory)
         const categoryProductCount = await Product.countDocuments({ category: id });
         const subcategoryProductCount = await Product.countDocuments({ subcategory: id });
@@ -128,9 +162,6 @@ async function deleteCategory(req, res) {
                 error: "Cannot delete category: This category has subcategories. Please delete the subcategories first." 
             });
         }
-
-        // Get the category first to access its thumbnail
-        const category = await Category.findById(id);
         if (!category) {
             return res.status(404).json({ error: 'Category not found' });
         }

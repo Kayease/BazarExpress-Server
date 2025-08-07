@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Warehouse = require('../models/Warehouse');
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 function generateToken(user) {
@@ -100,7 +101,7 @@ async function updateProfile(req, res, next) {
         if (address) update.address = address;
         
         const user = await User.findByIdAndUpdate(userId, update, { new: true });
-        res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, dateOfBirth: user.dateOfBirth, address: user.address || null, status: user.status } });
+        res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, dateOfBirth: user.dateOfBirth, address: user.address || null, status: user.status, assignedWarehouses: user.assignedWarehouses || [] } });
     } catch (err) {
         // Handle MongoDB duplicate key errors
         if (err.code === 11000) {
@@ -130,7 +131,8 @@ async function getAllUsers(req, res, next) {
             phone: u.phone,
             dateOfBirth: u.dateOfBirth,
             address: u.address || null,
-            status: u.status || 'active'
+            status: u.status || 'active',
+            assignedWarehouses: u.assignedWarehouses || []
         })));
     } catch (err) {
         next(err);
@@ -157,7 +159,16 @@ async function updateUserRole(req, res, next) {
         }
         const userId = req.params.id;
         const { role } = req.body;
-        if (!['admin', 'user'].includes(role)) {
+        const validRoles = [
+            'user', 
+            'admin', 
+            'product_inventory_management', 
+            'order_warehouse_management', 
+            'marketing_content_manager', 
+            'customer_support_executive', 
+            'report_finance_analyst'
+        ];
+        if (!validRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid role' });
         }
         await User.findByIdAndUpdate(userId, { role });
@@ -191,15 +202,25 @@ async function updateUserByAdmin(req, res, next) {
             return res.status(403).json({ error: 'Forbidden' });
         }
         const userId = req.params.id;
-        const { name, email, phone, dateOfBirth, address, role, status } = req.body;
+        const { name, email, phone, dateOfBirth, address, role, status, assignedWarehouses } = req.body;
+        const validRoles = [
+            'user', 
+            'admin', 
+            'product_inventory_management', 
+            'order_warehouse_management', 
+            'marketing_content_manager', 
+            'customer_support_executive', 
+            'report_finance_analyst'
+        ];
         const update = {};
         if (name) update.name = name;
         if (email) update.email = email;
         if (phone) update.phone = phone;
         if (dateOfBirth) update.dateOfBirth = dateOfBirth;
         if (address) update.address = address;
-        if (role && ['admin', 'user'].includes(role)) update.role = role;
+        if (role && validRoles.includes(role)) update.role = role;
         if (status && ['active', 'disabled'].includes(status)) update.status = status;
+        if (assignedWarehouses !== undefined) update.assignedWarehouses = assignedWarehouses;
         const user = await User.findByIdAndUpdate(userId, update, { new: true });
         if (!user) return res.status(404).json({ error: 'User not found' });
         res.json({
@@ -210,7 +231,8 @@ async function updateUserByAdmin(req, res, next) {
             phone: user.phone,
             dateOfBirth: user.dateOfBirth,
             address: user.address || null,
-            status: user.status
+            status: user.status,
+            assignedWarehouses: user.assignedWarehouses || []
         });
     } catch (err) {
         // Handle MongoDB duplicate key errors
@@ -242,9 +264,26 @@ async function getProfile(req, res) {
       phone: user.phone,
       dateOfBirth: user.dateOfBirth,
       address: user.address || null,
-      status: user.status
+      status: user.status,
+      assignedWarehouses: user.assignedWarehouses || []
     }
   });
 }
 
-module.exports = { register, login, updateProfile, getProfile, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin };
+async function getAllWarehouses(req, res, next) {
+    try {
+        if (!req.user || req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const warehouses = await Warehouse.find({});
+        res.json(warehouses.map(w => ({
+            id: w._id,
+            name: w.name,
+            address: w.address
+        })));
+    } catch (err) {
+        next(err);
+    }
+}
+
+module.exports = { register, login, updateProfile, getProfile, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin, getAllWarehouses };

@@ -9,6 +9,7 @@ const BrandSchema = new mongoose.Schema({
     isPopular: { type: Boolean, default: false },
     showOnHome: { type: Boolean, default: false },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 
 module.exports = mongoose.model("Brand", BrandSchema);

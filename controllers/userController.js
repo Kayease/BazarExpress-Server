@@ -305,4 +305,73 @@ exports.setDefaultAddress = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Server error', details: err.message });
   }
+};
+
+// Admin functions for user management
+exports.getAllUsers = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const search = req.query.search || '';
+
+    let query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const users = await User.find(query)
+      .select('-password') // Exclude password field
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalUsers = await User.countDocuments(query);
+
+    res.json({
+      users,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalUsers / limit),
+        totalUsers,
+        hasNext: page < Math.ceil(totalUsers / limit),
+        hasPrev: page > 1
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { status } = req.body;
+
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status. Must be active or inactive' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { status, updatedAt: new Date() },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: `User status updated to ${status}`,
+      user 
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
 }; 

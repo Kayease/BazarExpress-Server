@@ -1,13 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/productController');
+const { isAuth, hasPermission, hasWarehouseAccess, canAccessSection } = require('../middleware/authMiddleware');
 
-router.post('/', productController.createProduct);
+// Public routes (no authentication required)
 router.get('/', productController.getProducts);
 router.get('/paginated', productController.getProductsPaginated);
 router.get('/:id', productController.getProductById);
-router.put('/:id', productController.updateProduct);
-router.delete('/:id', productController.deleteProduct);
-router.post('/delete-image', productController.deleteImageByPublicId);
+
+// Admin routes with role-based access
+router.post('/', 
+    isAuth, 
+    hasPermission(['admin', 'product_inventory_management']),
+    hasWarehouseAccess,
+    canAccessSection('products'),
+    productController.createProduct
+);
+
+router.put('/:id', 
+    isAuth, 
+    hasPermission(['admin', 'product_inventory_management']),
+    hasWarehouseAccess,
+    canAccessSection('products'),
+    productController.updateProduct
+);
+
+router.delete('/:id', 
+    isAuth, 
+    hasPermission(['admin', 'product_inventory_management']),
+    hasWarehouseAccess,
+    canAccessSection('products'),
+    productController.deleteProduct
+);
+
+router.post('/delete-image', 
+    isAuth, 
+    hasPermission(['admin', 'product_inventory_management']),
+    canAccessSection('products'),
+    productController.deleteImageByPublicId
+);
 
 module.exports = router;
