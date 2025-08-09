@@ -12,7 +12,7 @@ router.post('/',
 
 router.get('/', 
     isAuth, 
-    hasPermission(['admin', 'order_warehouse_management']),
+    hasPermission(['admin', 'order_warehouse_management', 'product_inventory_management']),
     hasWarehouseAccess,
     canAccessSection('warehouse'),
     warehouseController.getWarehouses

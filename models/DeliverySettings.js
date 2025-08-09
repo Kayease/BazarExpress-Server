@@ -50,11 +50,7 @@ const deliverySettingsSchema = new mongoose.Schema({
         min: 0
     },
     
-    // COD settings
-    codExtraCharges: { 
-        type: Boolean, 
-        default: false 
-    },
+
 
     
     // Distance calculation method
@@ -151,8 +147,7 @@ deliverySettingsSchema.statics.calculateDeliveryCharge = async function(distance
             freeDeliveryMinAmount: settings.freeDeliveryMinAmount,
             freeDeliveryRadius: settings.freeDeliveryRadius,
             baseDeliveryCharge: settings.baseDeliveryCharge,
-            perKmCharge: settings.perKmCharge,
-            codAvailable: settings.codAvailable
+            perKmCharge: settings.perKmCharge
         }
     };
 };
@@ -233,8 +228,7 @@ deliverySettingsSchema.statics.calculateDeliveryChargeWithWarehouse = async func
             freeDeliveryMinAmount: settings.freeDeliveryMinAmount,
             freeDeliveryRadius: settings.freeDeliveryRadius,
             baseDeliveryCharge: settings.baseDeliveryCharge,
-            perKmCharge: settings.perKmCharge,
-            codAvailable: settings.codAvailable
+            perKmCharge: settings.perKmCharge
         }
     };
 };

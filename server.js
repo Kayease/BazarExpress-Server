@@ -25,6 +25,7 @@ const wishlistRoutes = require("./routes/wishlistRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const invoiceSettingsRoutes = require("./routes/invoiceSettingsRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const noticeController = require("./controllers/noticeController");
 
 const app = express();
@@ -32,7 +33,7 @@ const port = process.env.PORT || 4000;
 const MONGODB_URI = process.env.DB_URL;
 
 // Middleware
-const allowedOrigins = [
+const allowedOrigins = ['*',
   'http://localhost:1000',
   'http://localhost:3000',
   'https://bazar.sparkshift.digital',
@@ -79,6 +80,7 @@ app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/invoice-settings", invoiceSettingsRoutes);
 app.use("/api/admin/users", adminUserRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
 

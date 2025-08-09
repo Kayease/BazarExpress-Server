@@ -64,13 +64,13 @@ exports.getWarehouses = async(req, res, next) => {
         const { userId } = req.query;
         let warehouses;
         
-        // For order_warehouse_management role, only return assigned warehouses
-        if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+        // For warehouse-specific roles, only return assigned warehouses
+        if ((req.user.role === 'order_warehouse_management' || req.user.role === 'product_inventory_management') && req.assignedWarehouseIds) {
             warehouses = await Warehouse.find({ _id: { $in: req.assignedWarehouseIds } });
         } else if (userId) {
             warehouses = await Warehouse.getWarehousesByUser(userId);
         } else {
-            warehouses = await Warehouse.find(); // Return all warehouses if no userId
+            warehouses = await Warehouse.find(); // Return all warehouses if no userId (admin)
         }
         res.json(warehouses);
     } catch (err) {

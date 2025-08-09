@@ -57,8 +57,6 @@ const initializeDeliverySettings = async () => {
         minimumDeliveryCharge: 10,
         maximumDeliveryCharge: 100,
         perKmCharge: 5,
-        codExtraCharges: false,
-        codAvailable: true,
         isActive: true,
         createdBy: systemUser._id,
         updatedBy: systemUser._id
@@ -80,8 +78,6 @@ const initializeDeliverySettings = async () => {
         minimumDeliveryCharge: 15,
         maximumDeliveryCharge: 150,
         perKmCharge: 7, // Higher per km charge for global warehouses
-        codExtraCharges: false,
-        codAvailable: true,
         isActive: true,
         createdBy: systemUser._id,
         updatedBy: systemUser._id

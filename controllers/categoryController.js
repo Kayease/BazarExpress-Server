@@ -42,7 +42,7 @@ async function deleteImageFromCloudinary(imageUrl) {
 // Get all categories
 async function getCategories(req, res) {
     try {
-        const categories = await Category.find().sort({ sortOrder: 1, name: 1 });
+        const categories = await Category.find().sort({ name: 1 });
         // Count products for each category (including both direct and subcategory assignments)
         const categoriesWithCount = await Promise.all(categories.map(async (cat) => {
             const directCount = await Product.countDocuments({ category: cat._id });
@@ -59,13 +59,8 @@ async function getCategories(req, res) {
 // Create a new category
 async function createCategory(req, res) {
     try {
-        let { name, parentId = '', hide = false, popular = false, icon = 'Box', description = '', sortOrder = 0, slug = '', thumbnail = '', showOnHome = false } = req.body;
+        let { name, parentId = '', hide = false, popular = false, icon = 'Box', description = '', slug = '', thumbnail = '', showOnHome = false } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
-        // Check for unique sortOrder
-        const existingSortOrder = await Category.findOne({ sortOrder });
-        if (existingSortOrder) {
-            return res.status(400).json({ error: 'Sort order must be unique. Another category already has this value.' });
-        }
         if (thumbnail && thumbnail.startsWith('data:')) {
             thumbnail = await uploadThumbnailToCloudinary(thumbnail, slug || name);
         }
@@ -76,7 +71,6 @@ async function createCategory(req, res) {
             popular, 
             icon, 
             description, 
-            sortOrder, 
             slug, 
             thumbnail, 
             showOnHome,
@@ -92,7 +86,7 @@ async function createCategory(req, res) {
 async function updateCategory(req, res) {
     try {
         const { id } = req.params;
-        let { name, parentId = '', hide = false, popular = false, icon = 'Box', description = '', sortOrder = 0, slug = '', thumbnail = '', showOnHome = false } = req.body;
+        let { name, parentId = '', hide = false, popular = false, icon = 'Box', description = '', slug = '', thumbnail = '', showOnHome = false } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
         
         // Get the existing category to check ownership and thumbnail
@@ -106,12 +100,6 @@ async function updateCategory(req, res) {
             }
         }
         
-        // Check for unique sortOrder (exclude self)
-        const existingSortOrder = await Category.findOne({ sortOrder, _id: { $ne: id } });
-        if (existingSortOrder) {
-            return res.status(400).json({ error: 'Sort order must be unique. Another category already has this value.' });
-        }
-        
         if (thumbnail && thumbnail.startsWith('data:')) {
             // Delete old thumbnail if it exists
             if (existingCategory && existingCategory.thumbnail) {
@@ -120,7 +108,7 @@ async function updateCategory(req, res) {
             thumbnail = await uploadThumbnailToCloudinary(thumbnail, slug || name);
         }
         
-        const updated = await Category.findByIdAndUpdate(id, { name, parentId, hide, popular, icon, description, sortOrder, slug, thumbnail, showOnHome }, { new: true });
+        const updated = await Category.findByIdAndUpdate(id, { name, parentId, hide, popular, icon, description, slug, thumbnail, showOnHome }, { new: true });
         res.json(updated);
     } catch (err) {
         res.status(500).json({ error: 'Failed to update category' });
@@ -185,7 +173,7 @@ async function getSubcategoriesByParent(req, res) {
             return res.status(400).json({ error: 'Parent ID is required' });
         }
         
-        const subcategories = await Category.find({ parentId }).sort({ sortOrder: 1, name: 1 });
+        const subcategories = await Category.find({ parentId }).sort({ name: 1 });
         
         // Count products for each subcategory (checking both category and subcategory fields)
         const subcategoriesWithCount = await Promise.all(subcategories.map(async (subcat) => {

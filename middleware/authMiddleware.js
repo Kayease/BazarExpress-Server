@@ -114,7 +114,7 @@ exports.canAccessSection = (section) => {
                 'orders', 'warehouse'
             ],
             'product_inventory_management': [
-                'products', 'brands', 'categories'
+                'products', 'brands', 'categories', 'warehouse'
             ]
         };
         

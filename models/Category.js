@@ -7,7 +7,6 @@ const categorySchema = new mongoose.Schema({
     popular: { type: Boolean, default: false },
     icon: { type: String, default: "Box" },
     description: { type: String },
-    sortOrder: { type: Number, default: 0 },
     slug: { type: String },
     thumbnail: { type: String },
     showOnHome: { type: Boolean, default: false },

@@ -82,8 +82,7 @@ const updateDeliverySettings = async (req, res) => {
             baseDeliveryCharge,
             minimumDeliveryCharge,
             maximumDeliveryCharge,
-            perKmCharge,
-            codExtraCharges
+            perKmCharge
         } = req.body;
 
         // Validate warehouse type
@@ -123,7 +122,6 @@ const updateDeliverySettings = async (req, res) => {
             settings.minimumDeliveryCharge = minimumDeliveryCharge;
             settings.maximumDeliveryCharge = maximumDeliveryCharge;
             settings.perKmCharge = perKmCharge;
-            settings.codExtraCharges = codExtraCharges;
             settings.updatedBy = req.user.id;
             settings.updatedAt = new Date();
 
@@ -138,7 +136,6 @@ const updateDeliverySettings = async (req, res) => {
                 minimumDeliveryCharge,
                 maximumDeliveryCharge,
                 perKmCharge,
-                codExtraCharges,
                 createdBy: req.user.id,
                 updatedBy: req.user.id
             });
@@ -476,8 +473,6 @@ const initializeDeliverySettings = async (req, res) => {
             minimumDeliveryCharge: 10,
             maximumDeliveryCharge: 100,
             perKmCharge: 5,
-            codAvailable: true,
-
             calculationMethod: 'osrm',
             createdBy: req.user.id,
             updatedBy: req.user.id
