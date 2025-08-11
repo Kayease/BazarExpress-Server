@@ -30,18 +30,80 @@ exports.sendOtp = async (req, res) => {
   if (!phone || !/^\d{10}$/.test(phone)) {
     return res.status(400).json({ error: 'Invalid phone number' });
   }
+
+  // Check if user exists and their role
+  let user = await User.findOne({ phone });
+  let requiresPassword = false;
+  
+  if (user && user.requiresPassword()) {
+    requiresPassword = true;
+  }
+
   const otp = generateOtp();
   const sessionId = crypto.randomBytes(16).toString('hex');
-  otpStore[sessionId] = { phone, otp, expires: Date.now() + 5 * 60 * 1000 };
+  otpStore[sessionId] = { phone, otp, expires: Date.now() + 5 * 60 * 1000, requiresPassword };
   console.log('Generated OTP:', otp); // For testing
   const text = `Use ${otp} as One Time Password (OTP) to Get your Pie Certificates HTL`;
   try {
     const fullPhone = `91${phone}`;
     const url = `https://www.smsgatewayhub.com/api/mt/SendSMS?APIKey=${SMS_API_KEY}&senderid=${SENDER_ID}&channel=2&DCS=0&flashsms=0&number=${fullPhone}&text=${encodeURIComponent(text)}&route=clickhere&EntityId=${ENTITY_ID}&dlttemplateid=${TEMPLATE_ID}`;
     const response = await axios.get(url);
-    res.json({ success: true, sessionId });
+    res.json({ success: true, sessionId, requiresPassword, userRole: user?.role || null });
   } catch (err) {
     res.status(500).json({ error: 'Failed to send OTP' });
+  }
+};
+
+// New endpoint for password verification before OTP
+exports.verifyPassword = async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    
+    if (!phone || !password) {
+      return res.status(400).json({ error: 'Phone number and password are required' });
+    }
+
+    const user = await User.findOne({ phone });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if user requires password authentication
+    if (!user.requiresPassword()) {
+      return res.status(400).json({ error: 'Password authentication not required for this user role' });
+    }
+
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    // Password is valid, now send OTP
+    const otp = generateOtp();
+    const sessionId = crypto.randomBytes(16).toString('hex');
+    otpStore[sessionId] = { 
+      phone, 
+      otp, 
+      expires: Date.now() + 5 * 60 * 1000, 
+      requiresPassword: true,
+      passwordVerified: true 
+    };
+    
+    console.log('Generated OTP after password verification:', otp); // For testing
+    const text = `Use ${otp} as One Time Password (OTP) to Get your Pie Certificates HTL`;
+    
+    try {
+      const fullPhone = `91${phone}`;
+      const url = `https://www.smsgatewayhub.com/api/mt/SendSMS?APIKey=${SMS_API_KEY}&senderid=${SENDER_ID}&channel=2&DCS=0&flashsms=0&number=${fullPhone}&text=${encodeURIComponent(text)}&route=clickhere&EntityId=${ENTITY_ID}&dlttemplateid=${TEMPLATE_ID}`;
+      const response = await axios.get(url);
+      res.json({ success: true, sessionId, message: 'Password verified. OTP sent successfully.' });
+    } catch (err) {
+      res.status(500).json({ error: 'Password verified but failed to send OTP' });
+    }
+  } catch (err) {
+    console.error('Password verification error:', err);
+    res.status(500).json({ message: 'Internal server error during password verification' });
   }
 };
 
@@ -52,9 +114,20 @@ exports.verifyOtp = async (req, res) => {
     if (!record || record.phone !== phone || record.otp !== otp || Date.now() > record.expires) {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
+    
+    // For users that require password, ensure password was verified first
+    if (record.requiresPassword && !record.passwordVerified) {
+      return res.status(400).json({ error: 'Password verification required before OTP verification' });
+    }
+    
     delete otpStore[sessionId];
     let user = await User.findOne({ phone });
     if (!user) {
+      // Only create new users for 'user' role (regular customers)
+      if (record.requiresPassword) {
+        return res.status(404).json({ error: 'User account not found. Please contact administrator.' });
+      }
+      
       try {
         user = await User.createUser({
           name: '',

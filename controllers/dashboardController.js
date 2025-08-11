@@ -307,13 +307,11 @@ exports.getDashboard = async (req, res) => {
         require('../models/Contact').countDocuments({ createdAt: { $gte: today } }),
         require('../models/Contact').countDocuments({ createdAt: { $gte: monthStart } }),
         (async () => {
-          // If you have a Review model, uncomment and adjust this
-          // const Review = require('../models/Review');
-          // const total = await Review.countDocuments({});
-          // const pending = await Review.countDocuments({ status: 'pending' });
-          // const approved = await Review.countDocuments({ status: 'approved' });
-          // return { total, pending, approved };
-          return { total: 0, pending: 0, approved: 0 };
+          const Review = require('../models/Review');
+          const total = await Review.countDocuments({});
+          const pending = await Review.countDocuments({ status: 'pending' });
+          const approved = await Review.countDocuments({ status: 'approved' });
+          return { total, pending, approved };
         })(),
       ]);
 

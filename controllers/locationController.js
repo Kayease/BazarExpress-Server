@@ -404,9 +404,9 @@ const validateCartDelivery = async (req, res) => {
                         continue;
                     }
                     
-                    console.log(`[Warehouse ${warehouse._id}] Pincode validation successful`);
+                    // console.log(`[Warehouse ${warehouse._id}] Pincode validation successful`);
                 } else {
-                    console.log(`[Warehouse ${warehouse._id}] Skipping pincode validation for 24x7 warehouse`);
+                    // console.log(`[Warehouse ${warehouse._id}] Skipping pincode validation for 24x7 warehouse`);
                 }
 
                 console.log(`[Warehouse ${warehouse._id}] Calculating delivery route...`);

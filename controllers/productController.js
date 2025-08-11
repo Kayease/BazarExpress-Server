@@ -264,7 +264,7 @@ exports.deleteProduct = async(req, res) => {
                 let publicId = img && img.public_id ? img.public_id : extractPublicIdFromUrl(img);
                 if (publicId) {
                     const result = await cloudinary.uploader.destroy(publicId);
-                    console.log('Deleting from Cloudinary:', publicId, 'Result:', result);
+                    // console.log('Deleting from Cloudinary:', publicId, 'Result:', result);
                 }
             }
         }

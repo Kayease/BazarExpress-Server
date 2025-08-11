@@ -26,6 +26,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const invoiceSettingsRoutes = require("./routes/invoiceSettingsRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
 const noticeController = require("./controllers/noticeController");
 
 const app = express();
@@ -34,10 +35,10 @@ const MONGODB_URI = process.env.DB_URL;
 
 // Middleware
 const allowedOrigins = ['*',
-  'http://localhost:1000',
+  'http://localhost:3001',
   'http://localhost:3000',
-  'https://bazar.sparkshift.digital',
-  'https://www.bazar.sparkshift.digital',
+  'https://bazarxpress.kayease.com',
+  'https://www.bazarxpress.kayease.com',
   // Add more if needed
 ];
 
@@ -81,6 +82,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/invoice-settings", invoiceSettingsRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/reviews", reviewRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
 

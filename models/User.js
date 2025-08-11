@@ -1,8 +1,10 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
     name: { type: String, required: false, default: "" },
     email: { type: String, required: false, unique: true, sparse: true },
+    password: { type: String, required: false }, // Password for non-user roles
     role: { 
         type: String, 
         enum: [
@@ -86,6 +88,31 @@ userSchema.statics.findUserByPhone = function(phone) {
     return this.findOne({ phone });
 };
 
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+    if (!this.isModified('password') || !this.password) {
+        return next();
+    }
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
 
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    if (!this.password) {
+        return false;
+    }
+    return bcrypt.compare(candidatePassword, this.password);
+};
+
+// Check if user requires password authentication
+userSchema.methods.requiresPassword = function() {
+    return this.role !== 'user';
+};
 
 module.exports = mongoose.model('User', userSchema);

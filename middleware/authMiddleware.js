@@ -127,3 +127,37 @@ exports.canAccessSection = (section) => {
         next();
     };
 };
+
+// Optional authentication middleware - doesn't fail if no token
+exports.optionalAuth = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // No token provided, continue without user
+        return next();
+    }
+    
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.id).populate('assignedWarehouses');
+        
+        if (!user && decoded.phone) {
+            const userByPhone = await User.findUserByPhone(decoded.phone);
+            if (userByPhone) {
+                req.user = userByPhone;
+                return next();
+            }
+        }
+        
+        if (user) {
+            req.user = user;
+        }
+        next();
+    } catch (err) {
+        // Invalid token, but continue without user
+        next();
+    }
+};
+
+// Standard authentication middleware (alias for isAuth)
+exports.authenticateToken = exports.isAuth;

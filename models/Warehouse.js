@@ -133,12 +133,12 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
             let sameDayWarehouse = globalWarehouses.find(w => Array.isArray(w.deliverySettings.deliveryPincodes) && w.deliverySettings.deliveryPincodes.includes(pincode));
             if (sameDayWarehouse) {
                 deliveryMessage = 'Same day delivery';
-                console.log('[Warehouse.getEligibleProductsByPincode] 24x7 warehouse with same-day delivery found:', sameDayWarehouse._id);
+                // console.log('[Warehouse.getEligibleProductsByPincode] 24x7 warehouse with same-day delivery found:', sameDayWarehouse._id);
             } else {
                 deliveryMessage = 'May take few days';
             }
         } else {
-            console.warn('[Warehouse.getEligibleProductsByPincode] No warehouses found for pincode:', pincode);
+            // console.warn('[Warehouse.getEligibleProductsByPincode] No warehouses found for pincode:', pincode);
             return {
                 products: [],
                 totalProducts: 0,
@@ -149,7 +149,7 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
             };
         }
         const warehouseIds = warehousesToUse.map(w => w._id);
-        console.log('[Warehouse.getEligibleProductsByPincode] warehouseIds:', warehouseIds);
+        // console.log('[Warehouse.getEligibleProductsByPincode] warehouseIds:', warehouseIds);
         // 2. Build product query
         let productQuery = {
             warehouse: { $in: warehouseIds },

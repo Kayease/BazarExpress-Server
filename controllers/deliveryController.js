@@ -322,11 +322,11 @@ const calculateDeliveryCharge = async (req, res) => {
                         console.log(`✓ ${warehouse.name} is a global warehouse (24x7) - can deliver anywhere`);
                         validWarehouses.push(warehouse);
                     } else {
-                        console.log(`⚠ ${warehouse.name} is custom warehouse but no pincode provided`);
+                        // console.log(`⚠ ${warehouse.name} is custom warehouse but no pincode provided`);
                     }
                 }
                 
-                console.log('Valid warehouses after pincode check:', validWarehouses.length);
+                // console.log('Valid warehouses after pincode check:', validWarehouses.length);
                 
                 if (validWarehouses.length === 0) {
                     return res.status(400).json({

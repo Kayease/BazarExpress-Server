@@ -304,4 +304,90 @@ async function getAllWarehouses(req, res, next) {
     }
 }
 
-module.exports = { register, login, updateProfile, getProfile, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin, getAllWarehouses };
+async function setUserPassword(req, res, next) {
+    try {
+        if (!req.user || req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        
+        const userId = req.params.id;
+        const { password } = req.body;
+        
+        if (!password || password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+        
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Only allow setting passwords for non-user roles
+        if (user.role === 'user') {
+            return res.status(400).json({ error: 'Regular users do not require passwords' });
+        }
+        
+        user.password = password; // Will be hashed by the pre-save middleware
+        await user.save();
+        
+        res.json({ success: true, message: 'Password set successfully' });
+    } catch (err) {
+        next(err);
+    }
+}
+
+async function resetPassword(req, res, next) {
+    try {
+        const { userId, role, expires, password } = req.body;
+        
+        // Validate required fields
+        if (!userId || !role || !expires || !password) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        // Check if link has expired
+        const expiryTime = parseInt(expires);
+        const currentTime = Date.now();
+        
+        if (currentTime > expiryTime) {
+            return res.status(400).json({ error: 'Password reset link has expired' });
+        }
+        
+        // Validate password length
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+        
+        // Find the user
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Validate role matches
+        if (user.role !== role) {
+            return res.status(400).json({ error: 'Invalid reset link' });
+        }
+        
+        // Only allow password reset for non-user roles
+        if (user.role === 'user') {
+            return res.status(400).json({ error: 'Regular users do not require passwords' });
+        }
+        
+        // Validate role is authorized for password reset
+        const validRoles = ['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst'];
+        if (!validRoles.includes(user.role)) {
+            return res.status(400).json({ error: 'Unauthorized role for password reset' });
+        }
+        
+        // Update password
+        user.password = password; // Will be hashed by the pre-save middleware
+        await user.save();
+        
+        res.json({ success: true, message: 'Password reset successfully' });
+    } catch (err) {
+        next(err);
+    }
+}
+
+module.exports = { register, login, updateProfile, getProfile, getAllUsers, deleteUser, updateUserRole, updateUserStatus, updateUserByAdmin, getAllWarehouses, setUserPassword, resetPassword };
