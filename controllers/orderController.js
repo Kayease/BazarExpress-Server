@@ -1,6 +1,15 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Product = require('../models/Product');
+const crypto = require('crypto');
+
+// Store for delivery OTPs (in production, use Redis or database)
+const deliveryOtpStore = {};
+
+// Generate 4-digit OTP for delivery verification
+function generateDeliveryOtp() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
 // Create a new order
 const createOrder = async (req, res) => {
@@ -450,6 +459,134 @@ const getOrdersByStatus = async (req, res) => {
   }
 };
 
+// Generate delivery OTP for order status change to delivered
+const generateDeliveryOtpForOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await Order.findOne({ orderId });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if user has permission to update order status
+    if (req.user.role !== 'admin' && req.user.role !== 'order_warehouse_management') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // For warehouse-specific roles, check warehouse access
+    if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+      if (!req.assignedWarehouseIds.includes(order.warehouseInfo.warehouseId)) {
+        return res.status(403).json({ error: 'Access denied for this warehouse' });
+      }
+    }
+
+    // Generate OTP
+    const otp = generateDeliveryOtp();
+    const sessionId = crypto.randomBytes(16).toString('hex');
+    
+    // Store OTP with 10 minutes expiry
+    deliveryOtpStore[sessionId] = {
+      orderId,
+      otp,
+      expires: Date.now() + 10 * 60 * 1000, // 10 minutes
+      userId: req.user.id
+    };
+
+    console.log(`Delivery OTP for order ${orderId}: ${otp}`); // For testing - remove in production
+
+    res.json({
+      success: true,
+      sessionId,
+      message: 'Delivery OTP generated successfully',
+      // In production, don't send OTP in response - send via SMS/email
+      otp: otp // Only for testing
+    });
+
+  } catch (error) {
+    console.error('Error generating delivery OTP:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate delivery OTP',
+      details: error.message 
+    });
+  }
+};
+
+// Verify delivery OTP and update order status to delivered
+const verifyDeliveryOtpAndUpdateStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { otp, sessionId, note } = req.body;
+    
+    if (!otp || !sessionId) {
+      return res.status(400).json({ error: 'OTP and session ID are required' });
+    }
+
+    // Check OTP validity
+    const otpRecord = deliveryOtpStore[sessionId];
+    if (!otpRecord || otpRecord.orderId !== orderId || otpRecord.otp !== otp || Date.now() > otpRecord.expires) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    // Check if the user is the same who generated the OTP
+    if (otpRecord.userId !== req.user.id) {
+      return res.status(403).json({ error: 'OTP can only be verified by the user who generated it' });
+    }
+
+    // Clean up OTP
+    delete deliveryOtpStore[sessionId];
+
+    const order = await Order.findOne({ orderId });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if order can be marked as delivered
+    if (order.status === 'delivered') {
+      return res.status(400).json({ error: 'Order is already delivered' });
+    }
+
+    if (['cancelled', 'refunded'].includes(order.status)) {
+      return res.status(400).json({ error: 'Cannot mark cancelled or refunded order as delivered' });
+    }
+
+    // Update order status to delivered
+    order.addStatusHistory('delivered', req.user.id, note || 'Order delivered - OTP verified');
+
+    // Update payment status for COD orders
+    if (order.paymentInfo.method === 'cod') {
+      order.paymentInfo.status = 'paid';
+    }
+
+    // Set delivery date
+    if (!order.actualDeliveryDate) {
+      order.actualDeliveryDate = new Date();
+    }
+
+    await order.save();
+
+    const updatedOrder = await Order.findOne({ orderId })
+      .populate('userId', 'name email phone')
+      .populate('items.productId', 'name price image category brand')
+      .populate('statusHistory.updatedBy', 'name email');
+
+    res.json({
+      success: true,
+      message: 'Order status updated to delivered successfully',
+      order: updatedOrder
+    });
+
+  } catch (error) {
+    console.error('Error verifying delivery OTP:', error);
+    res.status(500).json({ 
+      error: 'Failed to verify delivery OTP',
+      details: error.message 
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   getUserOrders,
@@ -457,5 +594,7 @@ module.exports = {
   getOrderById,
   updateOrderStatus,
   cancelOrder,
-  getOrdersByStatus
+  getOrdersByStatus,
+  generateDeliveryOtpForOrder,
+  verifyDeliveryOtpAndUpdateStatus
 };

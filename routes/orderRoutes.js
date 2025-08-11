@@ -7,7 +7,9 @@ const {
   getOrderById,
   updateOrderStatus,
   cancelOrder,
-  getOrdersByStatus
+  getOrdersByStatus,
+  generateDeliveryOtpForOrder,
+  verifyDeliveryOtpAndUpdateStatus
 } = require('../controllers/orderController');
 const { isAuth, isAdmin, hasPermission, hasWarehouseAccess, canAccessSection } = require('../middleware/authMiddleware');
 
@@ -42,6 +44,24 @@ router.put('/admin/status/:orderId',
     hasWarehouseAccess,
     canAccessSection('orders'),
     updateOrderStatus
+);
+
+// Generate delivery OTP for order status change to delivered
+router.post('/admin/delivery-otp/:orderId', 
+    isAuth, 
+    hasPermission(['admin', 'order_warehouse_management']),
+    hasWarehouseAccess,
+    canAccessSection('orders'),
+    generateDeliveryOtpForOrder
+);
+
+// Verify delivery OTP and update order status to delivered
+router.put('/admin/delivery-verify/:orderId', 
+    isAuth, 
+    hasPermission(['admin', 'order_warehouse_management']),
+    hasWarehouseAccess,
+    canAccessSection('orders'),
+    verifyDeliveryOtpAndUpdateStatus
 );
 
 module.exports = router;

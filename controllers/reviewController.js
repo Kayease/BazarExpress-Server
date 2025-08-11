@@ -26,7 +26,7 @@ const getReviews = async (req, res) => {
     if (rating) filter.rating = parseInt(rating);
     
     // For public API, only show approved reviews
-    if (!req.user || !req.user.role || !['admin', 'super_admin', 'customer_support'].includes(req.user.role)) {
+    if (!req.user || !req.user.role || !['admin', 'customer_support_executive'].includes(req.user.role)) {
       filter.status = 'approved';
     }
 
@@ -81,7 +81,7 @@ const getReview = async (req, res) => {
     if (review.status !== 'approved' && 
         (!req.user || 
          (req.user._id.toString() !== review.user._id.toString() && 
-          !['admin', 'super_admin', 'customer_support'].includes(req.user.role)))) {
+          !['admin', 'customer_support_executive'].includes(req.user.role)))) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -175,7 +175,7 @@ const updateReview = async (req, res) => {
 
     // Check permissions
     const isOwner = review.user.toString() === userId.toString();
-    const isAdmin = ['admin', 'super_admin', 'customer_support'].includes(userRole);
+    const isAdmin = ['admin', 'customer_support_executive'].includes(userRole);
     
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ message: 'Access denied' });
@@ -226,7 +226,7 @@ const deleteReview = async (req, res) => {
 
     // Check permissions
     const isOwner = review.user.toString() === userId.toString();
-    const isAdmin = ['admin', 'super_admin'].includes(userRole);
+    const isAdmin = ['admin', 'customer_support_executive'].includes(userRole);
     
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ message: 'Access denied' });
@@ -248,8 +248,8 @@ const updateReviewStatus = async (req, res) => {
     const reviewId = req.params.id;
     const adminId = req.user._id;
 
-    // Check if user is admin
-    if (!['admin', 'super_admin', 'customer_support'].includes(req.user.role)) {
+    // Check if user is admin or customer support executive
+    if (!['admin', 'customer_support_executive'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
