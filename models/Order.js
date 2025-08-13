@@ -132,6 +132,23 @@ const orderSchema = new mongoose.Schema({
     is24x7Delivery: { type: Boolean, default: false }
   },
   
+  // Delivery Agent Assignment
+  assignedDeliveryBoy: {
+    id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    name: { type: String },
+    phone: { type: String },
+    assignedAt: { type: Date },
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  },
+  
+  // Delivery OTP for verification
+  deliveryOtp: {
+    otp: { type: String },
+    generatedAt: { type: Date },
+    expiresAt: { type: Date },
+    verified: { type: Boolean, default: false }
+  },
+  
   // Order Status and Tracking
   status: { 
     type: String, 

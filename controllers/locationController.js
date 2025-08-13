@@ -113,7 +113,7 @@ const checkLocationDelivery = async (req, res) => {
  */
 const getProductsByLocation = async (req, res) => {
     try {
-        const { lat, lng, category, search, page = 1, limit = 20 } = req.query;
+        const { lat, lng, category, search, page = 1, limit = 20, status } = req.query;
 
         // Validate coordinates
         if (!lat || !lng || isNaN(Number(lat)) || isNaN(Number(lng))) {
@@ -152,9 +152,15 @@ const getProductsByLocation = async (req, res) => {
         // Build product query
         let productQuery = {
             warehouseId: { $in: deliverableWarehouseIds },
-            status: 'active',
             stock: { $gt: 0 }
         };
+
+        // Add status filter - default to 'active' if not specified
+        if (status) {
+            productQuery.status = status;
+        } else {
+            productQuery.status = 'active';
+        }
 
         // Add category filter if provided
         if (category) {

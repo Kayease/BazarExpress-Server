@@ -41,7 +41,7 @@ function cacheMiddleware(req, res, next) {
 // Each role gets role-specific data from controller
 router.get('/', 
   isAuth,
-  hasPermission(['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst']),
+  hasPermission(['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'delivery_boy']),
   cacheMiddleware,
   dashboardController.getDashboard
 );

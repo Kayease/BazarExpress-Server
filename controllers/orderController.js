@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const crypto = require('crypto');
+const { sendDeliveryOTP } = require('../services/smsService');
 
 // Store for delivery OTPs (in production, use Redis or database)
 const deliveryOtpStore = {};
@@ -167,18 +168,35 @@ const getUserOrders = async (req, res) => {
 const getAllOrders = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 100; // Increased default limit for admin view
     const skip = (page - 1) * limit;
     
     const status = req.query.status;
     const search = req.query.search;
+    const warehouse = req.query.warehouse;
+    const deliveryBoyId = req.query.deliveryBoyId;
     
     // Build query
     let query = {};
     
+    // For delivery agents, only show their assigned orders
+    if (req.user.role === 'delivery_boy') {
+      query['assignedDeliveryBoy.id'] = req.user.id;
+    }
+    
     // For warehouse-specific roles, filter by assigned warehouses
     if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
       query['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
+    }
+    
+    // Apply warehouse filter from frontend (for admin users)
+    if (warehouse && warehouse !== 'all') {
+      query['warehouseInfo.warehouseId'] = warehouse;
+    }
+    
+    // Apply delivery agentfilter from frontend (only for non-delivery agents)
+    if (req.user.role !== 'delivery_boy' && deliveryBoyId && deliveryBoyId !== 'all') {
+      query['assignedDeliveryBoy.id'] = deliveryBoyId;
     }
     
     if (status && status !== 'all') {
@@ -205,8 +223,32 @@ const getAllOrders = async (req, res) => {
 
     const totalOrders = await Order.countDocuments(query);
 
-    // Get order statistics
-    const stats = await Order.aggregate([
+    // Get order statistics (filtered by the same warehouse filter but without status filter)
+    // We need to calculate stats for all statuses, not just the filtered status
+    let statsQuery = {};
+    
+    // For delivery agents, only show their assigned orders in stats
+    if (req.user.role === 'delivery_boy') {
+      statsQuery['assignedDeliveryBoy.id'] = req.user.id;
+    }
+    
+    // Apply warehouse filtering for stats (same as main query but without status filter)
+    if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+      statsQuery['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
+    }
+    
+    // Apply warehouse filter from frontend for stats (for admin users)
+    if (warehouse && warehouse !== 'all') {
+      statsQuery['warehouseInfo.warehouseId'] = warehouse;
+    }
+    
+    // Apply delivery agentfilter from frontend for stats (only for non-delivery agents)
+    if (req.user.role !== 'delivery_boy' && deliveryBoyId && deliveryBoyId !== 'all') {
+      statsQuery['assignedDeliveryBoy.id'] = deliveryBoyId;
+    }
+    
+    const statsAggregation = [
+      { $match: statsQuery }, // Apply warehouse filter but not status filter for stats
       {
         $group: {
           _id: '$status',
@@ -214,10 +256,15 @@ const getAllOrders = async (req, res) => {
           totalAmount: { $sum: '$pricing.total' }
         }
       }
-    ]);
+    ];
+    
+    const stats = await Order.aggregate(statsAggregation);
+
+    // Calculate total orders for stats (should match the sum of all status counts)
+    const totalOrdersForStats = await Order.countDocuments(statsQuery);
 
     const orderStats = {
-      total: totalOrders,
+      total: totalOrdersForStats,
       new: 0,
       processing: 0,
       shipped: 0,
@@ -413,6 +460,8 @@ const getOrdersByStatus = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
+    const search = req.query.search;
+    const warehouse = req.query.warehouse;
 
     const validStatuses = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
     if (!validStatuses.includes(status)) {
@@ -426,6 +475,31 @@ const getOrdersByStatus = async (req, res) => {
     if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
       query['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
     }
+    
+    // For delivery agent s, filter by their assigned orders
+    if (req.user.role === 'delivery_boy') {
+      query['assignedDeliveryBoy.id'] = req.user.id;
+    }
+    
+    // Apply delivery agentfilter from query params (for admin/warehouse managers)
+    if (req.query.deliveryBoyId && req.query.deliveryBoyId !== 'all') {
+      query['assignedDeliveryBoy.id'] = req.query.deliveryBoyId;
+    }
+    
+    // Apply warehouse filter from frontend (for admin users)
+    if (warehouse && warehouse !== 'all') {
+      query['warehouseInfo.warehouseId'] = warehouse;
+    }
+    
+    // Apply search filter
+    if (search) {
+      query.$or = [
+        { orderId: { $regex: search, $options: 'i' } },
+        { 'customerInfo.name': { $regex: search, $options: 'i' } },
+        { 'customerInfo.email': { $regex: search, $options: 'i' } },
+        { 'customerInfo.phone': { $regex: search, $options: 'i' } }
+      ];
+    }
 
     const orders = await Order.find(query)
       .sort({ createdAt: -1 })
@@ -437,6 +511,7 @@ const getOrdersByStatus = async (req, res) => {
       .populate('items.categoryId', 'name');
 
     const totalOrders = await Order.countDocuments(query);
+
 
     res.json({
       success: true,
@@ -471,7 +546,7 @@ const generateDeliveryOtpForOrder = async (req, res) => {
     }
 
     // Check if user has permission to update order status
-    if (req.user.role !== 'admin' && req.user.role !== 'order_warehouse_management') {
+    if (req.user.role !== 'admin' && req.user.role !== 'order_warehouse_management' && req.user.role !== 'delivery_boy') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -479,6 +554,36 @@ const generateDeliveryOtpForOrder = async (req, res) => {
     if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
       if (!req.assignedWarehouseIds.includes(order.warehouseInfo.warehouseId)) {
         return res.status(403).json({ error: 'Access denied for this warehouse' });
+      }
+    }
+
+    // For delivery agents, check if the order is assigned to them
+    if (req.user.role === 'delivery_boy') {
+      // Check both id and _id formats for compatibility
+      const assignedId = order.assignedDeliveryBoy?.id || order.assignedDeliveryBoy?._id;
+      const userId = req.user.id || req.user._id?.toString();
+      
+      // Convert both to strings for comparison
+      const assignedIdStr = assignedId?.toString();
+      const userIdStr = userId?.toString();
+      const reqUserIdStr = req.user.id?.toString();
+      const reqUserObjectIdStr = req.user._id?.toString();
+      
+      if (!assignedId) {
+        return res.status(403).json({ 
+          error: 'This order is not assigned to any delivery agent. Please contact admin to assign a delivery agent first.'
+        });
+      }
+      
+      // Check if any of the user ID formats match the assigned ID
+      const isMatch = assignedIdStr === userIdStr || 
+                     assignedIdStr === reqUserIdStr || 
+                     assignedIdStr === reqUserObjectIdStr;
+      
+      if (!isMatch) {
+        return res.status(403).json({ 
+          error: 'This order is assigned to a different delivery agent'
+        });
       }
     }
 
@@ -494,15 +599,36 @@ const generateDeliveryOtpForOrder = async (req, res) => {
       userId: req.user.id
     };
 
+    // Send OTP to customer's phone
+    const customerPhone = order.customerInfo.phone;
     console.log(`Delivery OTP for order ${orderId}: ${otp}`); // For testing - remove in production
-
-    res.json({
-      success: true,
-      sessionId,
-      message: 'Delivery OTP generated successfully',
-      // In production, don't send OTP in response - send via SMS/email
-      otp: otp // Only for testing
-    });
+    
+    try {
+      const smsSuccess = await sendDeliveryOTP(customerPhone, otp, orderId);
+      
+      if (smsSuccess) {
+        console.log(`Delivery OTP sent successfully to customer ${customerPhone} for order ${orderId}`);
+        res.json({
+          success: true,
+          sessionId,
+          message: 'Delivery OTP generated and sent to customer via SMS'
+        });
+      } else {
+        console.log(`Failed to send SMS to customer ${customerPhone}, but OTP generated for order ${orderId}`);
+        res.json({
+          success: true,
+          sessionId,
+          message: 'Delivery OTP generated successfully (SMS delivery failed - check server logs)'
+        });
+      }
+    } catch (smsError) {
+      console.error('SMS sending error:', smsError);
+      res.json({
+        success: true,
+        sessionId,
+        message: 'Delivery OTP generated successfully (SMS delivery failed - check server logs)'
+      });
+    }
 
   } catch (error) {
     console.error('Error generating delivery OTP:', error);
@@ -541,6 +667,44 @@ const verifyDeliveryOtpAndUpdateStatus = async (req, res) => {
     
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if user has permission to update order status
+    if (req.user.role !== 'admin' && req.user.role !== 'order_warehouse_management' && req.user.role !== 'delivery_boy') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // For warehouse-specific roles, check warehouse access
+    if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+      if (!req.assignedWarehouseIds.includes(order.warehouseInfo.warehouseId)) {
+        return res.status(403).json({ error: 'Access denied for this warehouse' });
+      }
+    }
+
+    // For delivery agents, check if the order is assigned to them
+    if (req.user.role === 'delivery_boy') {
+      // Check both id and _id formats for compatibility
+      const assignedId = order.assignedDeliveryBoy?.id || order.assignedDeliveryBoy?._id;
+      const userId = req.user.id || req.user._id?.toString();
+      
+      // Convert both to strings for comparison
+      const assignedIdStr = assignedId?.toString();
+      const userIdStr = userId?.toString();
+      const reqUserIdStr = req.user.id?.toString();
+      const reqUserObjectIdStr = req.user._id?.toString();
+      
+      // Check if any of the user ID formats match the assigned ID
+      const isMatch = assignedIdStr === userIdStr || 
+                     assignedIdStr === reqUserIdStr || 
+                     assignedIdStr === reqUserObjectIdStr;
+      
+      if (!assignedId) {
+        return res.status(403).json({ error: 'This order is not assigned to any delivery agent' });
+      }
+      
+      if (!isMatch) {
+        return res.status(403).json({ error: 'Access denied - order not assigned to you' });
+      }
     }
 
     // Check if order can be marked as delivered
@@ -587,6 +751,122 @@ const verifyDeliveryOtpAndUpdateStatus = async (req, res) => {
   }
 };
 
+// Assign delivery agentto order
+const assignDeliveryBoy = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { deliveryBoyId, deliveryBoyName, deliveryBoyPhone } = req.body;
+
+    // Check if user has permission to assign delivery agents
+    if (!['admin', 'order_warehouse_management'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if order is in a valid status for delivery agentassignment
+    // Allow assignment for orders that are "processing", "confirmed", or "shipped"
+    const validStatuses = ['processing', 'confirmed', 'shipped'];
+    if (!validStatuses.includes(order.status)) {
+      return res.status(400).json({ 
+        error: `Order must be in processing status to assign delivery agent ` 
+      });
+    }
+
+    // Update order with delivery agentassignment
+    order.assignedDeliveryBoy = {
+      id: deliveryBoyId,
+      name: deliveryBoyName,
+      phone: deliveryBoyPhone,
+      assignedAt: new Date(),
+      assignedBy: req.user.id
+    };
+
+    // Add status history for delivery agent assignment
+    order.addStatusHistory(order.status, req.user.id, `Assigned to delivery agent: ${deliveryBoyName}`);
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Delivery Agent assigned successfully',
+      order
+    });
+
+  } catch (error) {
+    console.error('Error assigning delivery agent:', error);
+    res.status(500).json({ 
+      error: 'Failed to assign delivery agent',
+      details: error.message 
+    });
+  }
+};
+
+
+
+// Get order statistics
+const getOrderStats = async (req, res) => {
+  try {
+    const warehouse = req.query.warehouse;
+    
+    // Build query based on user role and warehouse access
+    let statsQuery = {};
+    
+    // Apply warehouse filtering for stats
+    if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+      statsQuery['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
+    }
+    
+    // Apply warehouse filter from frontend (for admin users)
+    if (warehouse && warehouse !== 'all') {
+      statsQuery['warehouseInfo.warehouseId'] = warehouse;
+    }
+    
+    const statsAggregation = [
+      { $match: statsQuery },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$pricing.total' }
+        }
+      }
+    ];
+    
+    const stats = await Order.aggregate(statsAggregation);
+
+    const orderStats = {
+      new: 0,
+      processing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+      refunded: 0,
+      totalRevenue: 0
+    };
+
+    stats.forEach(stat => {
+      orderStats[stat._id] = stat.count;
+      orderStats.totalRevenue += stat.totalAmount;
+    });
+
+    res.json({
+      success: true,
+      stats: orderStats
+    });
+
+  } catch (error) {
+    console.error('Error fetching order stats:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch order statistics',
+      details: error.message 
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   getUserOrders,
@@ -596,5 +876,7 @@ module.exports = {
   cancelOrder,
   getOrdersByStatus,
   generateDeliveryOtpForOrder,
-  verifyDeliveryOtpAndUpdateStatus
+  verifyDeliveryOtpAndUpdateStatus,
+  assignDeliveryBoy,
+  getOrderStats
 };

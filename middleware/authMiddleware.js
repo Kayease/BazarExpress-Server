@@ -82,6 +82,15 @@ exports.hasWarehouseAccess = (req, res, next) => {
         req.assignedWarehouseIds = req.user.assignedWarehouses.map(w => w._id.toString());
     }
     
+    // For delivery boys, they can access warehouses but don't need assigned warehouses
+    // (they work with orders assigned to them, not warehouse-specific)
+    if (req.user.role === 'delivery_boy') {
+        // Add assigned warehouse IDs if they exist, but don't require them
+        if (req.user.assignedWarehouses && req.user.assignedWarehouses.length > 0) {
+            req.assignedWarehouseIds = req.user.assignedWarehouses.map(w => w._id.toString());
+        }
+    }
+    
     next();
 };
 
@@ -115,7 +124,10 @@ exports.canAccessSection = (section) => {
             ],
             'product_inventory_management': [
                 'products', 'brands', 'categories', 'warehouse'
-            ]
+            ],
+            'delivery_boy': [
+                'orders', 'warehouse'
+            ],
         };
         
         const allowedSections = rolePermissions[userRole] || [];
@@ -161,3 +173,35 @@ exports.optionalAuth = async (req, res, next) => {
 
 // Standard authentication middleware (alias for isAuth)
 exports.authenticateToken = exports.isAuth;
+
+// Special warehouse access middleware for delivery boy OTP operations
+exports.hasWarehouseAccessForDeliveryOtp = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Admin has access to all warehouses
+    if (req.user.role === 'admin') {
+        return next();
+    }
+    
+    // For warehouse-specific roles, check if they have assigned warehouses
+    const warehouseSpecificRoles = ['product_inventory_management', 'order_warehouse_management'];
+    
+    if (warehouseSpecificRoles.includes(req.user.role)) {
+        if (!req.user.assignedWarehouses || req.user.assignedWarehouses.length === 0) {
+            return res.status(403).json({ error: 'No warehouses assigned to this user' });
+        }
+        
+        // Add assigned warehouse IDs to request for filtering
+        req.assignedWarehouseIds = req.user.assignedWarehouses.map(w => w._id.toString());
+    }
+    
+    // For delivery boys, skip warehouse access check for OTP operations
+    // They will be validated at the order level in the controller
+    if (req.user.role === 'delivery_boy') {
+        return next();
+    }
+    
+    next();
+};

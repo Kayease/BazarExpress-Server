@@ -39,10 +39,20 @@ exports.sendOtp = async (req, res) => {
     requiresPassword = true;
   }
 
+  // For admin users (requiresPassword = true), don't send OTP yet
+  // Just return the requiresPassword flag so frontend can show password step
+  if (requiresPassword) {
+    const sessionId = crypto.randomBytes(16).toString('hex');
+    otpStore[sessionId] = { phone, expires: Date.now() + 5 * 60 * 1000, requiresPassword };
+    res.json({ success: true, sessionId, requiresPassword, userRole: user?.role || null });
+    return;
+  }
+
+  // For regular customers, send OTP immediately
   const otp = generateOtp();
   const sessionId = crypto.randomBytes(16).toString('hex');
   otpStore[sessionId] = { phone, otp, expires: Date.now() + 5 * 60 * 1000, requiresPassword };
-  console.log('Generated OTP:', otp); // For testing
+  console.log('Generated OTP for customer:', otp); // For testing
   const text = `Use ${otp} as One Time Password (OTP) to Get your Pie Certificates HTL`;
   try {
     const fullPhone = `91${phone}`;
@@ -89,6 +99,13 @@ exports.verifyPassword = async (req, res) => {
       requiresPassword: true,
       passwordVerified: true 
     };
+    
+    // Clean up any existing sessions for this phone to prevent conflicts
+    Object.keys(otpStore).forEach(key => {
+      if (otpStore[key].phone === phone && !otpStore[key].passwordVerified) {
+        delete otpStore[key];
+      }
+    });
     
     console.log('Generated OTP after password verification:', otp); // For testing
     const text = `Use ${otp} as One Time Password (OTP) to Get your Pie Certificates HTL`;

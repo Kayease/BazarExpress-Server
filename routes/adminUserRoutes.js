@@ -9,17 +9,40 @@ const router = express.Router();
 // Get all admin users (Super Admin only)
 router.get('/', 
     isAuth, 
-    hasPermission(['admin']),
+    hasPermission(['admin', 'order_warehouse_management']),
     async (req, res) => {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 20;
             const skip = (page - 1) * limit;
             const search = req.query.search || '';
+            const roleFilter = req.query.role;
+            const includeAll = req.query.includeAll === 'true';
 
-            let query = {
-                role: { $ne: 'user' } // Only get admin users, not regular customers
-            };
+            let query = {};
+            
+            // Only exclude regular users if includeAll is not true
+            if (!includeAll) {
+                query.role = { $ne: 'user' }; // Only get admin users, not regular customers
+            }
+
+            // Filter by specific role if provided
+            if (roleFilter && roleFilter !== 'all') {
+                query.role = roleFilter;
+            }
+
+            // For warehouse managers, only show delivery Agents assigned to their warehouses
+            if (req.user.role === 'order_warehouse_management' && req.assignedWarehouseIds) {
+                if (roleFilter === 'delivery_boy' || !roleFilter) {
+                    query.assignedWarehouses = { $in: req.assignedWarehouseIds };
+                    if (!roleFilter) {
+                        query.role = 'delivery_boy'; // Only show delivery Agents for warehouse managers if no role filter
+                    }
+                } else {
+                    // Warehouse managers can only see delivery Agents
+                    return res.json({ users: [], pagination: { currentPage: 1, totalPages: 0, totalUsers: 0, hasNext: false, hasPrev: false } });
+                }
+            }
 
             if (search) {
                 query.$or = [
@@ -36,10 +59,19 @@ router.get('/',
                 .skip(skip)
                 .limit(limit);
 
+            // Transform users to include warehouse IDs as strings for frontend filtering
+            const transformedUsers = users.map(user => {
+                const userObj = user.toObject();
+                if (userObj.assignedWarehouses) {
+                    userObj.assignedWarehouseIds = userObj.assignedWarehouses.map(warehouse => warehouse._id.toString());
+                }
+                return userObj;
+            });
+
             const totalUsers = await User.countDocuments(query);
 
             res.json({
-                users,
+                users: transformedUsers,
                 pagination: {
                     currentPage: page,
                     totalPages: Math.ceil(totalUsers / limit),
@@ -83,7 +115,8 @@ router.post('/',
                 'order_warehouse_management', 
                 'marketing_content_manager',
                 'customer_support_executive',
-                'report_finance_analyst'
+                'report_finance_analyst',
+                'delivery_boy'
             ];
 
             if (!validRoles.includes(role)) {
@@ -102,7 +135,7 @@ router.post('/',
             }
 
             // Validate warehouse assignments for roles that need them
-            const warehouseRequiredRoles = ['product_inventory_management', 'order_warehouse_management'];
+            const warehouseRequiredRoles = ['product_inventory_management', 'order_warehouse_management', 'delivery_boy'];
             if (warehouseRequiredRoles.includes(role)) {
                 if (!assignedWarehouses || assignedWarehouses.length === 0) {
                     return res.status(400).json({ 
@@ -169,7 +202,9 @@ router.put('/:userId',
                 phone, 
                 role, 
                 assignedWarehouses = [],
-                status 
+                status,
+                password,
+                dateOfBirth
             } = req.body;
 
             const user = await User.findById(userId);
@@ -192,7 +227,8 @@ router.put('/:userId',
                     'order_warehouse_management', 
                     'marketing_content_manager',
                     'customer_support_executive',
-                    'report_finance_analyst'
+                    'report_finance_analyst',
+                    'delivery_boy'
                 ];
 
                 if (!validRoles.includes(role)) {
@@ -201,7 +237,7 @@ router.put('/:userId',
             }
 
             // Validate warehouse assignments for roles that need them
-            const warehouseRequiredRoles = ['product_inventory_management', 'order_warehouse_management'];
+            const warehouseRequiredRoles = ['product_inventory_management', 'order_warehouse_management', 'delivery_boy'];
             const finalRole = role || user.role;
             
             if (warehouseRequiredRoles.includes(finalRole)) {
@@ -223,6 +259,13 @@ router.put('/:userId',
                 }
             }
 
+            // Hash password if provided
+            let hashedPassword = null;
+            if (password && password.trim() !== '') {
+                const salt = await bcrypt.genSalt(10);
+                hashedPassword = await bcrypt.hash(password, salt);
+            }
+
             // Update user
             const updateData = {
                 ...(name && { name }),
@@ -230,6 +273,8 @@ router.put('/:userId',
                 ...(phone && { phone }),
                 ...(role && { role }),
                 ...(status && { status }),
+                ...(dateOfBirth !== undefined && { dateOfBirth }),
+                ...(hashedPassword && { password: hashedPassword }),
                 assignedWarehouses: warehouseRequiredRoles.includes(finalRole) ? assignedWarehouses : [],
                 updatedAt: new Date()
             };

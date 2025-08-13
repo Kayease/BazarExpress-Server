@@ -165,7 +165,8 @@ async function updateUserRole(req, res, next) {
             'order_warehouse_management', 
             'marketing_content_manager', 
             'customer_support_executive', 
-            'report_finance_analyst'
+            'report_finance_analyst',
+            'delivery_boy'
         ];
         if (!validRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid role' });
@@ -228,7 +229,8 @@ async function updateUserByAdmin(req, res, next) {
             'order_warehouse_management', 
             'marketing_content_manager', 
             'customer_support_executive', 
-            'report_finance_analyst'
+            'report_finance_analyst',
+            'delivery_boy'
         ];
         const update = {};
         if (name) update.name = name;

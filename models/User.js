@@ -14,7 +14,8 @@ const userSchema = new mongoose.Schema({
             'order_warehouse_management', 
             'marketing_content_manager', 
             'customer_support_executive', 
-            'report_finance_analyst'
+            'report_finance_analyst',
+            'delivery_boy'
         ], 
         default: 'user' 
     },

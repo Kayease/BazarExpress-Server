@@ -401,6 +401,144 @@ exports.getDashboard = async (req, res) => {
       });
     }
 
+    if (role === 'delivery_boy') {
+      const today = startOfDay();
+      const deliveryBoyId = req.user.id;
+      
+      // Get assigned warehouses from both middleware and user profile
+      const warehouseIds = req.assignedWarehouseIds || [];
+      const userWarehouseIds = req.user.assignedWarehouses ? req.user.assignedWarehouses.map(w => w._id.toString()) : [];
+      const allWarehouseIds = [...new Set([...warehouseIds, ...userWarehouseIds])];
+      
+      // Get all orders for this delivery boy (excluding cancelled/refunded from performance metrics)
+      const [
+        assignedWarehouses, 
+        totalAssignedOrders, 
+        totalAssignedOrdersExcludingCancelledRefunded,
+        shippedOrders, 
+        deliveredOrders, 
+        todayDeliveries, 
+        todayAssignedOrders,
+        todayAssignedOrdersExcludingCancelledRefunded,
+        cancelledOrders,
+        refundedOrders,
+        todayCancelledOrders,
+        todayRefundedOrders,
+        // New: cancellations/refunds after delivery (overall and today)
+        cancelledAfterDelivery,
+        refundedAfterDelivery,
+        todayCancelledAfterDelivery,
+        todayRefundedAfterDelivery
+      ] = await Promise.all([
+        Warehouse.find({ _id: { $in: allWarehouseIds } }).select('name address'),
+        // All assigned orders (including cancelled/refunded for total count)
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId 
+        }),
+        // Performance metric: Exclude cancelled and refunded orders
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          status: { $nin: ['cancelled', 'refunded'] }
+        }),
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId, 
+          status: 'shipped' 
+        }),
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId, 
+          status: 'delivered' 
+        }),
+        Order.find({ 
+          'assignedDeliveryBoy.id': deliveryBoyId, 
+          status: 'delivered',
+          actualDeliveryDate: { $gte: today }
+        })
+        .sort({ actualDeliveryDate: -1 })
+        .select('orderId customerInfo pricing deliveryInfo actualDeliveryDate status')
+        .populate('items.productId', 'name image'),
+        // All today's assigned orders (including cancelled/refunded for total count)
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          'assignedDeliveryBoy.assignedAt': { $gte: today }
+        }),
+        // Performance metric: Today's assigned orders excluding cancelled/refunded
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          'assignedDeliveryBoy.assignedAt': { $gte: today },
+          status: { $nin: ['cancelled', 'refunded'] }
+        }),
+        // Cancelled orders stats
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId, 
+          status: 'cancelled' 
+        }),
+        // Refunded orders stats
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId, 
+          status: 'refunded' 
+        }),
+        // Today's cancelled orders
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          'assignedDeliveryBoy.assignedAt': { $gte: today },
+          status: 'cancelled' 
+        }),
+        // Today's refunded orders
+        Order.countDocuments({ 
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          'assignedDeliveryBoy.assignedAt': { $gte: today },
+          status: 'refunded' 
+        }),
+        // Cancelled after delivery (overall)
+        Order.countDocuments({
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          status: 'cancelled',
+          actualDeliveryDate: { $ne: null }
+        }),
+        // Refunded after delivery (overall)
+        Order.countDocuments({
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          status: 'refunded',
+          actualDeliveryDate: { $ne: null }
+        }),
+        // Today's cancelled after delivery (based on cancellation timestamp)
+        Order.countDocuments({
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          status: 'cancelled',
+          actualDeliveryDate: { $ne: null },
+          'cancellation.cancelledAt': { $gte: today }
+        }),
+        // Today's refunded after delivery (based on refund timestamp)
+        Order.countDocuments({
+          'assignedDeliveryBoy.id': deliveryBoyId,
+          status: 'refunded',
+          actualDeliveryDate: { $ne: null },
+          'cancellation.refundedAt': { $gte: today }
+        })
+      ]);
+
+      return res.json({
+        role,
+        cards: {
+          assignedOrders: totalAssignedOrders,
+          assignedOrdersExcludingCancelledRefunded: totalAssignedOrdersExcludingCancelledRefunded,
+          shippedOrders: shippedOrders,
+          deliveredOrders: deliveredOrders,
+          deliveredToday: todayDeliveries.length,
+          todayAssignedOrders: todayAssignedOrders,
+          todayAssignedOrdersExcludingCancelledRefunded: todayAssignedOrdersExcludingCancelledRefunded,
+          pendingDeliveries: shippedOrders, // Shipped orders are pending delivery
+          // Cancelled/Refunded after delivery stats (for performance/visibility)
+          cancelledAfterDelivery,
+          refundedAfterDelivery,
+          todayCancelledAfterDelivery,
+          todayRefundedAfterDelivery,
+        },
+        assignedWarehouses,
+        todayDeliveries
+      });
+    }
+
     // Fallback - minimal info
     return res.json({ role, message: 'No dashboard defined for this role' });
   } catch (err) {
