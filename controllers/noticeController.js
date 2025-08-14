@@ -131,4 +131,38 @@ exports.autoActivateNotices = async () => {
   } catch (err) {
     console.error('Error in auto-activation:', err);
   }
+};
+
+// Get notice statistics (admin)
+exports.getNoticeStats = async (req, res) => {
+  try {
+    const now = new Date();
+    
+    // Get all notices
+    const allNotices = await Notice.find();
+    
+    // Calculate stats
+    const stats = {
+      total: allNotices.length,
+      active: allNotices.filter(notice => notice.status === 'active').length,
+      inactive: allNotices.filter(notice => notice.status === 'inactive').length,
+      currentlyActive: allNotices.filter(notice => 
+        notice.status === 'active' && 
+        new Date(notice.startDate) <= now && 
+        new Date(notice.endDate) >= now
+      ).length,
+      scheduled: allNotices.filter(notice => 
+        notice.status === 'active' && 
+        new Date(notice.startDate) > now
+      ).length,
+      expired: allNotices.filter(notice => 
+        new Date(notice.endDate) < now
+      ).length
+    };
+    
+    res.json({ stats });
+  } catch (err) {
+    console.error('Error getting notice stats:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 }; 

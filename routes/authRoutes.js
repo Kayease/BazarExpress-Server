@@ -52,10 +52,14 @@ router.put('/profile', isAuth, updateProfile);
 router.get('/profile', isAuth, getProfile);
 // Allow admin and customer support executive to view users
 router.get('/users', isAuth, hasPermission(['admin', 'customer_support_executive']), canAccessSection('users'), getAllUsers);
+// Admin route for users (used by frontend for delivery agents, etc.)
+router.get('/admin/users', isAuth, hasPermission(['admin', 'customer_support_executive', 'order_warehouse_management']), canAccessSection('users'), getAllUsers);
 // Only admin can delete users (customer support can't delete)
 router.delete('/users/:id', isAuth, isAdmin, deleteUser);
+router.delete('/admin/users/:id', isAuth, isAdmin, deleteUser);
 // Only admin can change user roles (customer support can't change roles)
 router.patch('/users/:id/role', isAuth, isAdmin, updateUserRole);
+router.put('/admin/users/:id', isAuth, isAdmin, updateUserByAdmin);
 // Allow admin and customer support executive to update user status (activate/deactivate)
 router.patch('/users/:id/status', isAuth, hasPermission(['admin', 'customer_support_executive']), canAccessSection('users'), updateUserStatus);
 // Only admin can fully edit user details (customer support can't edit user details)

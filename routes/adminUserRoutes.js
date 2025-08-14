@@ -9,7 +9,7 @@ const router = express.Router();
 // Get all admin users (Super Admin only)
 router.get('/', 
     isAuth, 
-    hasPermission(['admin', 'order_warehouse_management']),
+    hasPermission(['admin', 'order_warehouse_management', 'customer_support_executive']),
     async (req, res) => {
         try {
             const page = parseInt(req.query.page) || 1;
@@ -43,6 +43,9 @@ router.get('/',
                     return res.json({ users: [], pagination: { currentPage: 1, totalPages: 0, totalUsers: 0, hasNext: false, hasPrev: false } });
                 }
             }
+
+            // For customer support executives, allow access to all users but with read-only permissions
+            // They can see all users for support purposes
 
             if (search) {
                 query.$or = [
@@ -110,6 +113,7 @@ router.post('/',
 
             // Validate role
             const validRoles = [
+                'user',
                 'admin',
                 'product_inventory_management',
                 'order_warehouse_management', 
@@ -222,6 +226,7 @@ router.put('/:userId',
             // Validate role if provided
             if (role) {
                 const validRoles = [
+                    'user',
                     'admin',
                     'product_inventory_management',
                     'order_warehouse_management', 

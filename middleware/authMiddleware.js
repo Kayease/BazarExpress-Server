@@ -111,10 +111,10 @@ exports.canAccessSection = (section) => {
         // Define role permissions
         const rolePermissions = {
             'marketing_content_manager': [
-                'banners', 'promocodes', 'blog', 'newsletter', 'notices'
+                'banners', 'promocodes', 'blog', 'newsletter', 'notices', 'products'
             ],
             'customer_support_executive': [
-                'users', 'enquiry', 'reviews', 'orders'
+                'users', 'enquiry', 'reviews', 'orders', 'warehouse'
             ],
             'report_finance_analyst': [
                 'reports', 'invoice-settings', 'taxes', 'delivery'

@@ -16,6 +16,13 @@ router.get('/',
     promocodeController.getAllPromocodes
 );
 
+router.get('/stats', 
+    isAuth, 
+    hasPermission(['admin', 'marketing_content_manager']),
+    canAccessSection('promocodes'),
+    promocodeController.getPromocodeStats
+);
+
 router.get('/:id', 
     isAuth, 
     hasPermission(['admin', 'marketing_content_manager']),

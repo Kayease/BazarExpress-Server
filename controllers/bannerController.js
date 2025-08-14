@@ -97,6 +97,31 @@ exports.getSpecialBanners = async(req, res) => {
     }
 };
 
+// Get banner statistics
+exports.getBannerStats = async(req, res) => {
+    try {
+        // Get all banners
+        const allBanners = await Banner.find();
+        
+        // Calculate stats
+        const stats = {
+            total: allBanners.length,
+            active: allBanners.filter(banner => banner.active === true).length,
+            inactive: allBanners.filter(banner => banner.active === false).length,
+            regular: allBanners.filter(banner => !banner.bannerType || banner.bannerType === 'regular').length,
+            special: allBanners.filter(banner => banner.bannerType && banner.bannerType !== 'regular').length,
+            banner1: allBanners.filter(banner => banner.bannerType === 'banner1').length,
+            banner2: allBanners.filter(banner => banner.bannerType === 'banner2').length,
+            banner3: allBanners.filter(banner => banner.bannerType === 'banner3').length
+        };
+        
+        res.json({ stats });
+    } catch (err) {
+        console.error('Error getting banner stats:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
 exports.deleteBannerImage = async(req, res) => {
     try {
         const { imageUrl } = req.body;

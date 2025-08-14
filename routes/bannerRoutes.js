@@ -6,6 +6,16 @@ const { isAuth, hasPermission, canAccessSection } = require('../middleware/authM
 // Public routes
 router.get('/', bannerController.getBanners);
 router.get('/special', bannerController.getSpecialBanners);
+
+// Admin: Get banner statistics (must be before '/:id')
+router.get('/stats', 
+    isAuth, 
+    hasPermission(['admin', 'marketing_content_manager']),
+    canAccessSection('banners'),
+    bannerController.getBannerStats
+);
+
+// Public: Get banner by id (kept after '/stats' to avoid collision)
 router.get('/:id', bannerController.getBanner);
 
 // Admin routes with role-based access

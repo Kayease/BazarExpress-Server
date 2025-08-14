@@ -11,7 +11,7 @@ router.get('/:id', productController.getProductById);
 // Admin route with authentication and warehouse filtering
 router.get('/', 
     isAuth, 
-    hasPermission(['admin', 'product_inventory_management']),
+    hasPermission(['admin', 'product_inventory_management', 'marketing_content_manager']),
     hasWarehouseAccess,
     canAccessSection('products'),
     productController.getProducts

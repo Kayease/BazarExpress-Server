@@ -121,18 +121,44 @@ async function getAllUsers(req, res, next) {
     try {
         // Permission check is handled by middleware (hasPermission and canAccessSection)
         // Allow both admin and customer_support_executive roles
-        const users = await User.find({});
-        res.json(users.map(u => ({
-            id: u._id,
-            name: u.name,
-            email: u.email,
-            role: u.role,
-            phone: u.phone,
-            dateOfBirth: u.dateOfBirth,
-            address: u.address || null,
-            status: u.status || 'active',
-            assignedWarehouses: u.assignedWarehouses || []
-        })));
+        
+        // Build query based on filters
+        let query = {};
+        
+        // Support role filtering via query parameter
+        if (req.query.role) {
+            query.role = req.query.role;
+        }
+        
+        // Support search functionality
+        if (req.query.search) {
+            const searchRegex = new RegExp(req.query.search, 'i');
+            query.$or = [
+                { name: searchRegex },
+                { email: searchRegex },
+                { phone: searchRegex }
+            ];
+        }
+        
+        // Support status filtering
+        if (req.query.status) {
+            query.status = req.query.status;
+        }
+        
+        const users = await User.find(query).populate('assignedWarehouses');
+        res.json({
+            users: users.map(u => ({
+                id: u._id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                phone: u.phone,
+                dateOfBirth: u.dateOfBirth,
+                address: u.address || null,
+                status: u.status || 'active',
+                assignedWarehouses: u.assignedWarehouses || []
+            }))
+        });
     } catch (err) {
         next(err);
     }
@@ -221,7 +247,11 @@ async function updateUserByAdmin(req, res, next) {
             return res.status(403).json({ error: 'Forbidden' });
         }
         const userId = req.params.id;
-        const { name, email, phone, dateOfBirth, address, role, status, assignedWarehouses } = req.body;
+        const { name, email, phone, dateOfBirth, address, role, status, assignedWarehouses, password } = req.body;
+        
+        // Debug logging to see what role is being sent
+        console.log('updateUserByAdmin - Received role:', role, 'Type:', typeof role);
+        
         const validRoles = [
             'user', 
             'admin', 
@@ -232,15 +262,35 @@ async function updateUserByAdmin(req, res, next) {
             'report_finance_analyst',
             'delivery_boy'
         ];
+        // Validate role if provided
+        if (role && !validRoles.includes(role)) {
+            return res.status(400).json({ error: 'Invalid role specified' });
+        }
+        
+        // Validate status if provided
+        if (status && !['active', 'disabled'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status specified' });
+        }
+        
         const update = {};
         if (name) update.name = name;
         if (email) update.email = email;
         if (phone) update.phone = phone;
         if (dateOfBirth) update.dateOfBirth = dateOfBirth;
         if (address) update.address = address;
-        if (role && validRoles.includes(role)) update.role = role;
-        if (status && ['active', 'disabled'].includes(status)) update.status = status;
+        if (role) update.role = role;
+        if (status) update.status = status;
         if (assignedWarehouses !== undefined) update.assignedWarehouses = assignedWarehouses;
+        
+        // Handle password update if provided
+        if (password && password.trim() !== '') {
+            if (password.length < 6) {
+                return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+            }
+            // Password will be hashed by the User model's pre-save middleware
+            update.password = password;
+        }
+        
         const user = await User.findByIdAndUpdate(userId, update, { new: true });
         if (!user) return res.status(404).json({ error: 'User not found' });
         res.json({

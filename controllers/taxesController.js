@@ -11,6 +11,24 @@ exports.getAllTaxes = async(req, res) => {
     }
 };
 
+// Get tax statistics
+exports.getTaxStats = async(req, res) => {
+    try {
+        const allTaxes = await Tax.find();
+        
+        const stats = {
+            total: allTaxes.length,
+            active: allTaxes.filter(tax => tax.status === 'active').length,
+            inactive: allTaxes.filter(tax => tax.status === 'inactive').length
+        };
+        
+        res.json({ stats });
+    } catch (err) {
+        console.error('Error getting tax stats:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
 // Get a single tax by ID
 exports.getTaxById = async(req, res) => {
     try {

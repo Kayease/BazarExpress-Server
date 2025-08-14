@@ -12,9 +12,8 @@ router.post('/',
 
 router.get('/', 
     isAuth, 
-    hasPermission(['admin', 'order_warehouse_management', 'product_inventory_management', 'delivery_boy']),
+    hasPermission(['admin', 'order_warehouse_management', 'product_inventory_management', 'delivery_boy', 'customer_support_executive']),
     hasWarehouseAccess,
-    canAccessSection('warehouse'),
     warehouseController.getWarehouses
 );
 

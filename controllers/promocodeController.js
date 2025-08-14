@@ -60,6 +60,41 @@ exports.deletePromocode = async(req, res) => {
     }
 };
 
+// Get promocode statistics
+exports.getPromocodeStats = async(req, res) => {
+    try {
+        const now = new Date();
+        
+        // Get all promocodes
+        const allPromocodes = await Promocode.find();
+        
+        // Calculate stats
+        const stats = {
+            total: allPromocodes.length,
+            active: allPromocodes.filter(promo => 
+                promo.status === true && 
+                (!promo.endDate || new Date(promo.endDate) >= now) &&
+                (!promo.startDate || new Date(promo.startDate) <= now)
+            ).length,
+            inactive: allPromocodes.filter(promo => promo.status === false).length,
+            scheduled: allPromocodes.filter(promo => 
+                promo.status === true && 
+                promo.startDate && 
+                new Date(promo.startDate) > now
+            ).length,
+            expired: allPromocodes.filter(promo => 
+                promo.endDate && 
+                new Date(promo.endDate) < now
+            ).length
+        };
+        
+        res.json({ stats });
+    } catch (err) {
+        console.error('Error getting promocode stats:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
 // Validate promocode
 exports.validatePromocode = async(req, res) => {
     try {

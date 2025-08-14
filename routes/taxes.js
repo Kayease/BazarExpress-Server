@@ -5,6 +5,7 @@ const { isAuth, hasPermission, canAccessSection } = require('../middleware/authM
 
 // Public routes (for product calculations)
 router.get('/', taxesController.getAllTaxes);
+router.get('/stats', taxesController.getTaxStats);
 router.get('/:id', taxesController.getTaxById);
 
 // Admin routes with role-based access

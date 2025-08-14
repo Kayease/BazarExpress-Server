@@ -9,6 +9,9 @@ router.get('/active', noticeController.getActiveNotice);
 // Admin routes - Allow admin and marketing_content_manager
 router.get('/', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.getAllNotices);
 
+// Admin: Get notice statistics
+router.get('/stats', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.getNoticeStats);
+
 // Admin: Create a new notice
 router.post('/', isAuth, hasPermission(['admin', 'marketing_content_manager']), canAccessSection('notices'), noticeController.createNotice);
 
