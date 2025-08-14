@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { isAuth } = require('../middleware/authMiddleware');
+const { trackCartActivity } = require('../middleware/abandonedCartMiddleware');
 const {
     getCart,
     addToCart,
@@ -12,6 +13,9 @@ const {
 
 // All cart routes require authentication
 router.use(isAuth);
+
+// Track cart activity for abandoned cart detection
+router.use(trackCartActivity);
 
 // Get user's cart
 router.get('/', getCart);

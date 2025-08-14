@@ -111,10 +111,10 @@ exports.canAccessSection = (section) => {
         // Define role permissions
         const rolePermissions = {
             'marketing_content_manager': [
-                'banners', 'promocodes', 'blog', 'newsletter', 'notices', 'products'
+                'banners', 'promocodes', 'blog', 'newsletter', 'notices', 'products', 'abandoned-cart'
             ],
             'customer_support_executive': [
-                'users', 'enquiry', 'reviews', 'orders', 'warehouse'
+                'users', 'enquiry', 'reviews', 'orders', 'warehouse', 'abandoned-cart'
             ],
             'report_finance_analyst': [
                 'reports', 'invoice-settings', 'taxes', 'delivery'
@@ -123,7 +123,7 @@ exports.canAccessSection = (section) => {
                 'orders', 'warehouse'
             ],
             'product_inventory_management': [
-                'products', 'brands', 'categories', 'warehouse'
+                'products', 'brands', 'categories', 'warehouse', 'search-gaps'
             ],
             'delivery_boy': [
                 'orders', 'warehouse'

@@ -62,6 +62,7 @@ const userSchema = new mongoose.Schema({
             addedAt: { type: Date, default: Date.now }
         }
     ],
+    lastCartActivity: { type: Date, default: Date.now },
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
     createdAt: { type: Date, default: Date.now },
 });

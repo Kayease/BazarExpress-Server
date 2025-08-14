@@ -27,7 +27,12 @@ const invoiceSettingsRoutes = require("./routes/invoiceSettingsRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const abandonedCartRoutes = require("./routes/abandonedCartRoutes");
+const searchGapRoutes = require("./routes/searchGapRoutes");
 const noticeController = require("./controllers/noticeController");
+
+// Import abandoned cart middleware
+const { cleanupExpiredCarts } = require("./middleware/abandonedCartMiddleware");
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -83,8 +88,13 @@ app.use("/api/invoice-settings", invoiceSettingsRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/abandoned-carts", abandonedCartRoutes);
+app.use("/api/search-gaps", searchGapRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
+
+// Add abandoned cart middleware for cleanup only
+app.use(cleanupExpiredCarts);
 
 // Global error handler
 app.use(errorHandler);
@@ -96,6 +106,24 @@ async function runAutoActivation() {
     } catch (err) {
     }
 }
+
+// Scheduled abandoned cart cleanup function
+async function runAbandonedCartCleanup() {
+    try {
+        const AbandonedCartService = require('./services/abandonedCartService');
+        await AbandonedCartService.cleanupExpiredCarts();
+        console.log('Scheduled abandoned cart cleanup completed');
+    } catch (err) {
+        console.error('Scheduled abandoned cart cleanup failed:', err);
+    }
+}
+
+// Schedule abandoned cart cleanup every 24 hours
+setInterval(runAbandonedCartCleanup, 24 * 60 * 60 * 1000);
+
+// Run initial checks
+runAutoActivation();
+runAbandonedCartCleanup();
 
 // Function to schedule daily auto-activation at 12:00 AM
 function scheduleDailyAutoActivation() {
