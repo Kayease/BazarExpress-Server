@@ -19,9 +19,7 @@ const productSchema = new mongoose.Schema({
     // Advanced fields from the form:
     sku: { type: String },
     hsn: { type: String },
-    costPrice: { type: Number },
-    priceIncludesTax: { type: Boolean, default: false },
-    allowBackorders: { type: Boolean, default: false },
+    priceIncludesTax: { type: Boolean, default: true }, // Changed default to true
     lowStockThreshold: { type: Number, default: 0 },
     weight: { type: Number },
     dimensions: {
@@ -35,18 +33,10 @@ const productSchema = new mongoose.Schema({
     codAvailable: { type: Boolean, default: false },
     mainImage: { type: String },
     galleryImages: [{ type: String }],
-    video: { type: String },
-    model3d: { type: String },
     metaTitle: { type: String },
     metaDescription: { type: String },
     metaKeywords: { type: String },
-    canonicalUrl: { type: String },
-    legal_hsn: { type: String },
-    batchNumber: { type: String },
-    manufacturer: { type: String },
-    warranty: { type: String },
-    certifications: { type: String },
-    safetyInfo: { type: String },
+    locationName: { type: String, default: "" }, // New field for product location
     mrp: { type: Number, default: 0 },
     variants: { type: Object, default: {} },
     attributes: [{ name: String, values: [String] }],
