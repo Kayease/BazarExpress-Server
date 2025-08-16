@@ -112,13 +112,13 @@ warehouseSchema.statics.findWarehousesByPincode = async function(pincode) {
 
 // Fetch eligible products for a pincode with pagination, category, and search
 warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, options = {}) {
-    console.log('[Warehouse.getEligibleProductsByPincode] Called with:', { pincode, options });
+    // console.log('[Warehouse.getEligibleProductsByPincode] Called with:', { pincode, options });
     try {
     const Product = require('./Product');
     const { page = 1, limit = 20, category, search } = options;
     // 1. Get eligible warehouses (custom + global)
     const { customWarehouses, globalWarehouses } = await this.findWarehousesByPincode(pincode);
-        console.log('[Warehouse.getEligibleProductsByPincode] customWarehouses:', customWarehouses.length, 'globalWarehouses:', globalWarehouses.length);
+        // console.log('[Warehouse.getEligibleProductsByPincode] customWarehouses:', customWarehouses.length, 'globalWarehouses:', globalWarehouses.length);
         let warehousesToUse = [];
         let deliveryMode = 'none';
         let deliveryMessage = '';
@@ -158,17 +158,17 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
         };
         if (category) {
             productQuery.category = category;
-            console.log('[Warehouse.getEligibleProductsByPincode] Filtering by category:', category);
+            // console.log('[Warehouse.getEligibleProductsByPincode] Filtering by category:', category);
         }
         if (search) {
             productQuery.$or = [
                 { name: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } }
             ];
-            console.log('[Warehouse.getEligibleProductsByPincode] Filtering by search:', search);
+            // console.log('[Warehouse.getEligibleProductsByPincode] Filtering by search:', search);
         }
         const skip = (parseInt(page) - 1) * parseInt(limit);
-        console.log('[Warehouse.getEligibleProductsByPincode] Product query:', productQuery, '| Skip:', skip, '| Limit:', limit);
+        // console.log('[Warehouse.getEligibleProductsByPincode] Product query:', productQuery, '| Skip:', skip, '| Limit:', limit);
         // 3. Fetch products and total count
         const [products, totalProducts] = await Promise.all([
             Product.find(productQuery)
@@ -181,7 +181,7 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
                 .sort({ createdAt: -1 }),
             Product.countDocuments(productQuery)
         ]);
-        console.log('[Warehouse.getEligibleProductsByPincode] Products found:', products.length, 'Total:', totalProducts);
+        // console.log('[Warehouse.getEligibleProductsByPincode] Products found:', products.length, 'Total:', totalProducts);
         // 4. Return results
         return {
             products,

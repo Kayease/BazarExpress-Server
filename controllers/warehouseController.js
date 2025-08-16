@@ -262,7 +262,7 @@ exports.getProductsByPincode = async (req, res, next) => {
             // console.log('[getProductsByPincode] Found global warehouses:', globalWarehouses.length);
             
             if (globalWarehouses.length === 0) {
-                console.warn('[getProductsByPincode] No global warehouses found for pincode:', pincode);
+                // console.warn('[getProductsByPincode] No global warehouses found for pincode:', pincode);
                 return res.json({
                     success: true,
                     products: [],
@@ -285,10 +285,10 @@ exports.getProductsByPincode = async (req, res, next) => {
             
             if (category) {
                 productQuery.category = category;
-                console.log('[getProductsByPincode] Filtering by category:', category);
+                // console.log('[getProductsByPincode] Filtering by category:', category);
             }
             if (search) {
-                console.log('[getProductsByPincode] Filtering by search:', search);
+                // console.log('[getProductsByPincode] Filtering by search:', search);
                 productQuery.$or = [
                     { name: { $regex: search, $options: 'i' } },
                     { description: { $regex: search, $options: 'i' } }
@@ -333,14 +333,14 @@ exports.getProductsByPincode = async (req, res, next) => {
                 category,
                 search
             });
-            console.log('[getProductsByPincode] Eligible products result:', JSON.stringify(eligibleResult));
+            // console.log('[getProductsByPincode] Eligible products result:', JSON.stringify(eligibleResult));
             result = {
                 success: true,
                 ...eligibleResult
             };
         }
         
-        console.log('[getProductsByPincode] Sending result:', JSON.stringify(result));
+        // console.log('[getProductsByPincode] Sending result:', JSON.stringify(result));
         res.json(result);
         
     } catch (err) {

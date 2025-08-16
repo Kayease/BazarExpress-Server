@@ -158,27 +158,46 @@ exports.getProducts = async (req, res) => {
 // Paginated and searchable products endpoint
 exports.getProductsPaginated = async (req, res) => {
     try {
-        const { search = '', page = 1, limit = 20 } = req.query;
+        const { search = '', page = 1, limit = 20, warehouse, parentCategory, category, brand } = req.query;
         const query = {};
         
         if (search) {
             query.name = { $regex: search, $options: 'i' };
         }
         
-        // For product_inventory_management role, filter by assigned warehouses
-        if (req.user && req.user.role === 'product_inventory_management' && req.assignedWarehouseIds) {
+        // Warehouse filtering - specific warehouse or role-based filtering
+        if (warehouse) {
+            query.warehouse = warehouse;
+        } else if (req.user && req.user.role === 'product_inventory_management' && req.assignedWarehouseIds) {
             query.warehouse = { $in: req.assignedWarehouseIds };
+        }
+        
+        // Category filtering
+        if (parentCategory) {
+            query.category = parentCategory;
+        }
+        if (category) {
+            query.subcategory = category;
+        }
+        
+        // Brand filtering
+        if (brand) {
+            query.brand = brand;
         }
         
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const products = await Product.find(query)
             .populate('brand')
             .populate('category')
+            .populate('subcategory')
             .populate('warehouse')
             .populate('tax')
             .skip(skip)
             .limit(parseInt(limit));
         const total = await Product.countDocuments(query);
+        
+
+        
         res.json({
             products,
             total,

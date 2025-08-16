@@ -85,9 +85,13 @@ exports.getSearchGaps = async (req, res) => {
       status = 'all', 
       priority = 'all',
       timeFilter = 'all',
+      startDate,
+      endDate,
       page = 1, 
       limit = 50 
     } = req.query;
+
+    console.log('Search gaps query params:', { search, status, priority, timeFilter, startDate, endDate, page, limit });
 
     const query = {};
     
@@ -110,8 +114,22 @@ exports.getSearchGaps = async (req, res) => {
       query.priority = priority;
     }
     
-    // Time filter
-    if (timeFilter !== 'all') {
+    // Date range filter (new - takes precedence over timeFilter)
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      // Set end time to end of day
+      end.setHours(23, 59, 59, 999);
+      
+      query.lastSearched = { 
+        $gte: start, 
+        $lte: end 
+      };
+      
+      console.log('Applied date filter:', { start, end, query: query.lastSearched });
+    }
+    // Time filter (fallback - only if no date range specified)
+    else if (timeFilter !== 'all') {
       const now = new Date();
       let startDate;
       
@@ -132,6 +150,8 @@ exports.getSearchGaps = async (req, res) => {
       }
     }
 
+    console.log('Final query:', JSON.stringify(query, null, 2));
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     const searchGaps = await SearchGap.find(query)
@@ -141,6 +161,8 @@ exports.getSearchGaps = async (req, res) => {
       .populate('searchedBy.userId', 'name phone');
     
     const total = await SearchGap.countDocuments(query);
+    
+    console.log(`Found ${searchGaps.length} search gaps out of ${total} total`);
     
     res.json({
       searchGaps,
@@ -204,12 +226,26 @@ exports.deleteSearchGap = async (req, res) => {
 // Get search gap statistics
 exports.getSearchGapStats = async (req, res) => {
   try {
-    const totalGaps = await SearchGap.countDocuments();
-    const newGaps = await SearchGap.countDocuments({ status: 'new' });
-    const investigatingGaps = await SearchGap.countDocuments({ status: 'investigating' });
-    const plannedGaps = await SearchGap.countDocuments({ status: 'planned' });
+    const { startDate, endDate } = req.query;
+    
+    // Build date filter query
+    let dateFilter = {};
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      // Set end time to end of day
+      end.setHours(23, 59, 59, 999);
+      
+      dateFilter = { lastSearched: { $gte: start, $lte: end } };
+    }
+    
+    const totalGaps = await SearchGap.countDocuments(dateFilter);
+    const newGaps = await SearchGap.countDocuments({ ...dateFilter, status: 'new' });
+    const investigatingGaps = await SearchGap.countDocuments({ ...dateFilter, status: 'investigating' });
+    const plannedGaps = await SearchGap.countDocuments({ ...dateFilter, status: 'planned' });
     
     const totalSearches = await SearchGap.aggregate([
+      { $match: dateFilter },
       { $group: { _id: null, total: { $sum: '$searchCount' } } }
     ]);
     

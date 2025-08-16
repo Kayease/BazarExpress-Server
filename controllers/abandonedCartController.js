@@ -12,12 +12,18 @@ const getAbandonedCarts = async (req, res) => {
             isRegistered, 
             search, 
             timeFilter,
+            startDate,
+            endDate,
             sortBy = 'abandonedAt',
             sortOrder = 'desc'
         } = req.query;
 
+        console.log('Abandoned cart query params:', { page, limit, isRegistered, search, timeFilter, startDate, endDate });
+
         // Get all abandoned carts using the simplified service
         let allCarts = await AbandonedCartService.getAllAbandonedCarts();
+        
+        console.log(`Total carts before filtering: ${allCarts.length}`);
         
         // Apply filters
         let filteredCarts = allCarts;
@@ -25,6 +31,7 @@ const getAbandonedCarts = async (req, res) => {
         // Filter by registration status
         if (isRegistered !== undefined) {
             filteredCarts = filteredCarts.filter(cart => cart.isRegistered === (isRegistered === 'true'));
+            console.log(`After registration filter: ${filteredCarts.length} carts`);
         }
 
         // Search filter
@@ -34,13 +41,30 @@ const getAbandonedCarts = async (req, res) => {
                 cart.userEmail?.toLowerCase().includes(search.toLowerCase()) ||
                 cart.phone?.includes(search)
             );
+            console.log(`After search filter: ${filteredCarts.length} carts`);
         }
 
-        // Time filter
-        if (timeFilter && timeFilter !== 'all') {
+        // Date range filter (new - takes precedence over timeFilter)
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            // Set end time to end of day
+            end.setHours(23, 59, 59, 999);
+            
+            console.log('Applying date filter:', { start, end });
+            
+            filteredCarts = filteredCarts.filter(cart => {
+                const cartDate = new Date(cart.abandonedAt);
+                return cartDate >= start && cartDate <= end;
+            });
+            
+            console.log(`After date filter: ${filteredCarts.length} carts`);
+        }
+        // Time filter (fallback - only if no date range specified)
+        else if (timeFilter && timeFilter !== 'all') {
             const now = new Date();
             let startDate;
-
+            
             switch (timeFilter) {
                 case 'today':
                     startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -51,51 +75,24 @@ const getAbandonedCarts = async (req, res) => {
                 case 'month':
                     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
                     break;
-                default:
-                    startDate = null;
             }
-
+            
             if (startDate) {
-                filteredCarts = filteredCarts.filter(cart => cart.abandonedAt >= startDate);
+                filteredCarts = filteredCarts.filter(cart => new Date(cart.abandonedAt) >= startDate);
             }
         }
 
-        // Sort
-        filteredCarts.sort((a, b) => {
-            let aValue, bValue;
-            
-            switch (sortBy) {
-                case 'abandonedAt':
-                    aValue = a.abandonedAt;
-                    bValue = b.abandonedAt;
-                    break;
-                case 'lastActivity':
-                    aValue = a.lastActivity;
-                    bValue = b.lastActivity;
-                    break;
-                case 'totalValue':
-                    aValue = a.totalValue;
-                    bValue = b.totalValue;
-                    break;
-                default:
-                    aValue = a.abandonedAt;
-                    bValue = b.abandonedAt;
-            }
-            
-            if (sortOrder === 'desc') {
-                return bValue - aValue;
-            } else {
-                return aValue - bValue;
-            }
-        });
-
-        // Pagination
         const totalCount = filteredCarts.length;
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const paginatedCarts = filteredCarts.slice(skip, skip + parseInt(limit));
 
+        console.log(`Final result: ${paginatedCarts.length} carts on page ${page} out of ${totalCount} total`);
+
         // Get statistics
-        const stats = await AbandonedCartService.getAbandonedCartStats();
+        const stats = await AbandonedCartService.getAbandonedCartStats({
+            startDate: startDate,
+            endDate: endDate
+        });
 
         res.json({
             carts: paginatedCarts,

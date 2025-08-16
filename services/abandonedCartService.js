@@ -103,45 +103,36 @@ class AbandonedCartService {
     }
     
     // Get abandoned cart statistics
-    static async getAbandonedCartStats() {
+    static async getAbandonedCartStats(dateFilter = {}) {
         try {
-            // Count registered users with carts
-            const registeredCount = await User.countDocuments({
-                'cart.0': { $exists: true }
-            });
+            // Get all abandoned carts
+            const allCarts = await this.getAllAbandonedCarts();
             
-            // Count unregistered abandoned carts
-            const unregisteredCount = await AbandonedCart.countDocuments({
-                isRegistered: false,
-                status: 'active'
-            });
+            // Apply date filter if provided
+            let filteredCarts = allCarts;
+            if (dateFilter.startDate && dateFilter.endDate) {
+                const start = new Date(dateFilter.startDate);
+                const end = new Date(dateFilter.endDate);
+                end.setHours(23, 59, 59, 999);
+                
+                filteredCarts = allCarts.filter(cart => {
+                    const cartDate = new Date(cart.abandonedAt);
+                    return cartDate >= start && cartDate <= end;
+                });
+            }
             
-            // Calculate total value
-            const [registeredValue, unregisteredValue] = await Promise.all([
-                User.aggregate([
-                    { $match: { 'cart.0': { $exists: true } } },
-                    { $unwind: '$cart' },
-                    { $lookup: { from: 'products', localField: 'cart.productId', foreignField: '_id', as: 'product' } },
-                    { $unwind: '$product' },
-                    { $group: { _id: null, total: { $sum: { $multiply: ['$cart.quantity', '$product.price'] } } } }
-                ]),
-                AbandonedCart.aggregate([
-                    { $match: { isRegistered: false, status: 'active' } },
-                    { $group: { _id: null, total: { $sum: '$totalValue' } } }
-                ])
-            ]);
-            
-            const totalRegisteredValue = registeredValue.length > 0 ? registeredValue[0].total : 0;
-            const totalUnregisteredValue = unregisteredValue.length > 0 ? unregisteredValue[0].total : 0;
-            const totalValue = totalRegisteredValue + totalUnregisteredValue;
-            const total = registeredCount + unregisteredCount;
+            const total = filteredCarts.length;
+            const registered = filteredCarts.filter(cart => cart.isRegistered).length;
+            const unregistered = filteredCarts.filter(cart => !cart.isRegistered).length;
+            const totalValue = filteredCarts.reduce((sum, cart) => sum + cart.totalValue, 0);
+            const averageValue = total > 0 ? totalValue / total : 0;
             
             return {
                 total,
-                registered: registeredCount,
-                unregistered: unregisteredCount,
+                registered,
+                unregistered,
                 totalValue,
-                averageValue: total > 0 ? totalValue / total : 0
+                averageValue
             };
         } catch (error) {
             console.error('Error getting abandoned cart stats:', error);
@@ -248,7 +239,7 @@ class AbandonedCartService {
                 $set: { lastCartActivity: new Date() }
             });
             
-            console.log(`Tracked cart activity for user ${userId}: ${activityType}`);
+            // console.log(`Tracked cart activity for user ${userId}: ${activityType}`);
         } catch (error) {
             console.error('Error tracking cart activity:', error);
         }
