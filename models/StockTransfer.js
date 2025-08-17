@@ -10,7 +10,10 @@ const stockTransferItemSchema = new mongoose.Schema({
     sku: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true },
-    totalPrice: { type: Number, required: true }
+    totalPrice: { type: Number, required: true },
+    variantKey: { type: String, default: null }, // For variant products (e.g., "S::RED")
+    variantName: { type: String, default: null }, // Human-readable variant name (e.g., "S - RED")
+    variantDetails: { type: mongoose.Schema.Types.Mixed, default: null } // Full variant object
 });
 
 const stockTransferSchema = new mongoose.Schema({
@@ -74,13 +77,39 @@ const stockTransferSchema = new mongoose.Schema({
 stockTransferSchema.pre('save', async function(next) {
     if (this.isNew && !this.transferId) {
         const year = new Date().getFullYear();
-        const count = await this.constructor.countDocuments({
-            createdAt: {
-                $gte: new Date(year, 0, 1),
-                $lt: new Date(year + 1, 0, 1)
+        
+        // Find the highest existing transfer ID for this year
+        const latestTransfer = await this.constructor.findOne({
+            transferId: { $regex: `^TR-${year}-` }
+        }).sort({ transferId: -1 });
+        
+        let nextNumber = 1;
+        if (latestTransfer && latestTransfer.transferId) {
+            // Extract the number from the latest transfer ID (e.g., "TR-2025-0003" -> 3)
+            const match = latestTransfer.transferId.match(/TR-\d{4}-(\d{4})$/);
+            if (match) {
+                nextNumber = parseInt(match[1]) + 1;
             }
-        });
-        this.transferId = `TR-${year}-${String(count + 1).padStart(4, '0')}`;
+        }
+        
+        this.transferId = `TR-${year}-${String(nextNumber).padStart(4, '0')}`;
+        
+        // Double-check for uniqueness (in case of race conditions)
+        let attempts = 0;
+        while (attempts < 10) {
+            const existing = await this.constructor.findOne({ transferId: this.transferId });
+            if (!existing) {
+                break; // ID is unique, we can use it
+            }
+            // ID already exists, increment and try again
+            nextNumber++;
+            this.transferId = `TR-${year}-${String(nextNumber).padStart(4, '0')}`;
+            attempts++;
+        }
+        
+        if (attempts >= 10) {
+            return next(new Error('Unable to generate unique transfer ID after 10 attempts'));
+        }
     }
     next();
 });

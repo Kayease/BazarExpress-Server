@@ -322,3 +322,59 @@ exports.deleteImageByPublicId = async (req, res) => {
     return res.status(500).json({ error: 'Server error', details: err.message });
   }
 };
+
+// Check if SKU exists in a specific warehouse
+exports.checkSKUExists = async (req, res) => {
+  try {
+    const { sku, warehouse, excludeId } = req.query;
+    
+    if (!sku || !warehouse) {
+      return res.status(400).json({ error: 'SKU and warehouse are required' });
+    }
+
+    // Build query to check for SKU in the specified warehouse
+    const query = {
+      warehouse: warehouse,
+      $or: [
+        { sku: sku }, // Check main product SKU
+        { 'variants': { $elemMatch: { sku: sku } } } // Check variant SKUs
+      ]
+    };
+
+    // Exclude current product if editing
+    if (excludeId) {
+      query._id = { $ne: excludeId };
+    }
+
+    const existingProduct = await Product.findOne(query).select('name sku variants');
+    
+    if (existingProduct) {
+      // Check if it's a main product SKU or variant SKU
+      let isVariantSku = false;
+      let variantName = '';
+      
+      if (existingProduct.sku !== sku && existingProduct.variants) {
+        // It's a variant SKU, find which variant
+        for (const [variantKey, variant] of Object.entries(existingProduct.variants)) {
+          if (variant.sku === sku) {
+            isVariantSku = true;
+            variantName = variantKey;
+            break;
+          }
+        }
+      }
+      
+      res.json({ 
+        exists: true, 
+        productName: existingProduct.name,
+        isVariant: isVariantSku,
+        variantName: variantName
+      });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error('Error checking SKU:', err);
+    res.status(500).json({ error: 'Server error while checking SKU' });
+  }
+};
