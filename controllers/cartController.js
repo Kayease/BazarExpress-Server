@@ -51,7 +51,7 @@ const getCart = async (req, res) => {
 // Add item to cart
 const addToCart = async (req, res) => {
     try {
-        const { productId, quantity = 1 } = req.body;
+        const { productId, quantity = 1, variantId, variantName, selectedVariant } = req.body;
 
         if (!productId) {
             return res.status(400).json({ error: 'Product ID is required' });
@@ -67,14 +67,41 @@ const addToCart = async (req, res) => {
             return res.status(400).json({ error: 'Product warehouse information not found' });
         }
 
+        // Validate variant selection for products with variants
+        if (product.variants && product.variants.length > 0 && !variantId) {
+            return res.status(400).json({ 
+                error: 'VARIANT_REQUIRED',
+                message: 'Please select a variant before adding to cart',
+                productName: product.name,
+                availableVariants: product.variants
+            });
+        }
+
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Check if item already exists in cart
+        // Check if item already exists in cart (including variant matching)
+        // Products with variants: must match exact variantId
+        // Products without variants: both must have no variantId
         const existingItemIndex = user.cart.findIndex(
-            item => item.productId.toString() === productId
+            item => {
+                const isSameProduct = item.productId.toString() === productId;
+                
+                // If both have variantId, they must match exactly
+                if (item.variantId && variantId) {
+                    return isSameProduct && item.variantId === variantId;
+                }
+                
+                // If neither has variantId, they match (same product, no variants)
+                if (!item.variantId && !variantId) {
+                    return isSameProduct;
+                }
+                
+                // If one has variantId and other doesn't, they don't match
+                return false;
+            }
         );
 
         if (existingItemIndex > -1) {
@@ -130,11 +157,18 @@ const addToCart = async (req, res) => {
             }
 
             // Add new item to cart
-            user.cart.push({
+            const cartItem = {
                 productId,
                 quantity,
                 addedAt: new Date()
-            });
+            };
+            
+            // Add variant information if provided
+            if (variantId) cartItem.variantId = variantId;
+            if (variantName) cartItem.variantName = variantName;
+            if (selectedVariant) cartItem.selectedVariant = selectedVariant;
+            
+            user.cart.push(cartItem);
         }
 
         await user.save();
@@ -176,7 +210,7 @@ const addToCart = async (req, res) => {
 // Update cart item quantity
 const updateCartItem = async (req, res) => {
     try {
-        const { productId, quantity } = req.body;
+        const { productId, quantity, variantId } = req.body;
 
         if (!productId || quantity === undefined) {
             return res.status(400).json({ error: 'Product ID and quantity are required' });
@@ -191,8 +225,24 @@ const updateCartItem = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Find cart item with variant matching logic
         const cartItemIndex = user.cart.findIndex(
-            item => item.productId.toString() === productId
+            item => {
+                const isSameProduct = item.productId.toString() === productId;
+                
+                // If both have variantId, they must match exactly
+                if (item.variantId && variantId) {
+                    return isSameProduct && item.variantId === variantId;
+                }
+                
+                // If neither has variantId, they match (same product, no variants)
+                if (!item.variantId && !variantId) {
+                    return isSameProduct;
+                }
+                
+                // If one has variantId and other doesn't, they don't match
+                return false;
+            }
         );
 
         if (cartItemIndex === -1) {
@@ -247,6 +297,7 @@ const updateCartItem = async (req, res) => {
 const removeFromCart = async (req, res) => {
     try {
         const { productId } = req.params;
+        const { variantId } = req.query;
 
         if (!productId) {
             return res.status(400).json({ error: 'Product ID is required' });
@@ -258,8 +309,24 @@ const removeFromCart = async (req, res) => {
         }
 
         const initialLength = user.cart.length;
+        // Remove item with variant matching logic
         user.cart = user.cart.filter(
-            item => item.productId.toString() !== productId
+            item => {
+                const isSameProduct = item.productId.toString() === productId;
+                
+                // If both have variantId, they must match exactly to be removed
+                if (item.variantId && variantId) {
+                    return !(isSameProduct && item.variantId === variantId);
+                }
+                
+                // If neither has variantId, remove if same product
+                if (!item.variantId && !variantId) {
+                    return !isSameProduct;
+                }
+                
+                // If one has variantId and other doesn't, don't remove
+                return true;
+            }
         );
 
         if (user.cart.length === initialLength) {
@@ -367,7 +434,7 @@ const syncCart = async (req, res) => {
         const validItems = [];
 
         for (const localItem of localCart) {
-            const { id: productId, quantity } = localItem;
+            const { id: productId, quantity, variantId, variantName, selectedVariant } = localItem;
             
             if (!productId || !quantity) continue;
 
@@ -375,21 +442,39 @@ const syncCart = async (req, res) => {
             const product = await Product.findById(productId).populate('warehouse');
             if (!product || !product.warehouse) continue;
 
-            // Check if item already exists in database cart
+            // Check if item already exists in database cart (including variant matching)
             const existingItemIndex = user.cart.findIndex(
                 item => {
                     // Handle both populated and non-populated productId
                     const itemProductId = item.productId._id ? item.productId._id.toString() : item.productId.toString();
-                    return itemProductId === productId.toString();
+                    const isSameProduct = itemProductId === productId.toString();
+                    
+                    // If both have variantId, they must match exactly
+                    if (item.variantId && variantId) {
+                        return isSameProduct && item.variantId === variantId;
+                    }
+                    
+                    // If neither has variantId, they match (same product, no variants)
+                    if (!item.variantId && !variantId) {
+                        return isSameProduct;
+                    }
+                    
+                    // If one has variantId and other doesn't, they don't match
+                    return false;
                 }
             );
 
             if (existingItemIndex > -1) {
-                // Update quantity to the maximum of existing and local quantity
+                // Add local quantity to existing quantity (sync should be additive)
                 const existingQuantity = user.cart[existingItemIndex].quantity;
-                const newQuantity = Math.max(existingQuantity, quantity);
+                const newQuantity = existingQuantity + quantity;
                 user.cart[existingItemIndex].quantity = newQuantity;
-                validItems.push({ productId, quantity: newQuantity, action: 'updated' });
+                
+                // Update variant information if provided in local cart
+                if (variantName) user.cart[existingItemIndex].variantName = variantName;
+                if (selectedVariant) user.cart[existingItemIndex].selectedVariant = selectedVariant;
+                
+                validItems.push({ productId, quantity: newQuantity, action: 'updated', variantId });
             } else {
                 // Warehouse validation for new items
                 const currentProductWarehouse = product.warehouse;
@@ -406,11 +491,18 @@ const syncCart = async (req, res) => {
                     });
                 } else {
                     // Add new item to cart
-                    user.cart.push({
+                    const cartItem = {
                         productId,
                         quantity,
                         addedAt: new Date()
-                    });
+                    };
+                    
+                    // Add variant information if provided
+                    if (variantId) cartItem.variantId = variantId;
+                    if (variantName) cartItem.variantName = variantName;
+                    if (selectedVariant) cartItem.selectedVariant = selectedVariant;
+                    
+                    user.cart.push(cartItem);
                     validItems.push({ productId, quantity, action: 'added' });
 
                     // Update existing custom warehouse reference if this is a custom warehouse

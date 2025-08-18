@@ -53,13 +53,21 @@ const userSchema = new mongoose.Schema({
         {
             productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
             quantity: { type: Number, required: true, min: 1 },
-            addedAt: { type: Date, default: Date.now }
+            addedAt: { type: Date, default: Date.now },
+            // Variant information
+            variantId: { type: String }, // ID of the selected variant
+            variantName: { type: String }, // Name/description of the selected variant
+            selectedVariant: { type: Object } // Complete variant object with all properties
         }
     ],
     wishlist: [
         {
             productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-            addedAt: { type: Date, default: Date.now }
+            addedAt: { type: Date, default: Date.now },
+            // Variant information
+            variantId: { type: String }, // ID of the selected variant
+            variantName: { type: String }, // Name/description of the selected variant
+            selectedVariant: { type: Object } // Complete variant object with all properties
         }
     ],
     lastCartActivity: { type: Date, default: Date.now },

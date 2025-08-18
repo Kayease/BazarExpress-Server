@@ -32,7 +32,7 @@ const getWishlist = async (req, res) => {
 // Add item to wishlist
 const addToWishlist = async (req, res) => {
     try {
-        const { productId } = req.body;
+        const { productId, variantId, variantName, selectedVariant } = req.body;
 
         if (!productId) {
             return res.status(400).json({ error: 'Product ID is required' });
@@ -49,20 +49,40 @@ const addToWishlist = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Check if item already exists in wishlist
-        const existingItem = user.wishlist.find(
-            item => item.productId.toString() === productId
-        );
+        // Check if item already exists in wishlist (including variant matching)
+        const existingItem = user.wishlist.find(item => {
+            const isSameProduct = item.productId.toString() === productId;
+            
+            // If both have variantId, they must match exactly
+            if (item.variantId && variantId) {
+                return isSameProduct && item.variantId === variantId;
+            }
+            
+            // If neither has variantId, they match (same product, no variants)
+            if (!item.variantId && !variantId) {
+                return isSameProduct;
+            }
+            
+            // If one has variantId and other doesn't, they don't match
+            return false;
+        });
 
         if (existingItem) {
             return res.status(400).json({ error: 'Item already in wishlist' });
         }
 
         // Add new item to wishlist
-        user.wishlist.push({
+        const wishlistItem = {
             productId,
             addedAt: new Date()
-        });
+        };
+        
+        // Add variant information if provided
+        if (variantId) wishlistItem.variantId = variantId;
+        if (variantName) wishlistItem.variantName = variantName;
+        if (selectedVariant) wishlistItem.selectedVariant = selectedVariant;
+        
+        user.wishlist.push(wishlistItem);
 
         await user.save();
 
@@ -86,6 +106,7 @@ const addToWishlist = async (req, res) => {
 const removeFromWishlist = async (req, res) => {
     try {
         const { productId } = req.params;
+        const { variantId } = req.query;
 
         if (!productId) {
             return res.status(400).json({ error: 'Product ID is required' });
@@ -97,9 +118,17 @@ const removeFromWishlist = async (req, res) => {
         }
 
         const initialLength = user.wishlist.length;
-        user.wishlist = user.wishlist.filter(
-            item => item.productId.toString() !== productId
-        );
+        user.wishlist = user.wishlist.filter(item => {
+            const isSameProduct = item.productId.toString() === productId;
+            
+            // If variantId is provided, match both product and variant
+            if (variantId) {
+                return !(isSameProduct && item.variantId === variantId);
+            }
+            
+            // If no variantId provided, remove items without variants only
+            return !(isSameProduct && !item.variantId);
+        });
 
         if (user.wishlist.length === initialLength) {
             return res.status(404).json({ error: 'Item not found in wishlist' });
@@ -161,6 +190,9 @@ const syncWishlist = async (req, res) => {
         // Process each item in local wishlist
         for (const localItem of localWishlist) {
             const productId = localItem.id || localItem._id;
+            const variantId = localItem.variantId;
+            const variantName = localItem.variantName;
+            const selectedVariant = localItem.selectedVariant;
             
             if (!productId) continue;
 
@@ -168,17 +200,37 @@ const syncWishlist = async (req, res) => {
             const product = await Product.findById(productId);
             if (!product) continue;
 
-            // Check if item already exists in database wishlist
-            const existingItem = user.wishlist.find(
-                item => item.productId.toString() === productId
-            );
+            // Check if item already exists in database wishlist (with variant matching)
+            const existingItem = user.wishlist.find(item => {
+                const isSameProduct = item.productId.toString() === productId;
+                
+                // If both have variantId, they must match exactly
+                if (item.variantId && variantId) {
+                    return isSameProduct && item.variantId === variantId;
+                }
+                
+                // If neither has variantId, they match (same product, no variants)
+                if (!item.variantId && !variantId) {
+                    return isSameProduct;
+                }
+                
+                // If one has variantId and other doesn't, they don't match
+                return false;
+            });
 
             if (!existingItem) {
-                // Add new item to wishlist
-                user.wishlist.push({
+                // Add new item to wishlist with variant information
+                const wishlistItem = {
                     productId,
                     addedAt: new Date()
-                });
+                };
+                
+                // Add variant information if provided
+                if (variantId) wishlistItem.variantId = variantId;
+                if (variantName) wishlistItem.variantName = variantName;
+                if (selectedVariant) wishlistItem.selectedVariant = selectedVariant;
+                
+                user.wishlist.push(wishlistItem);
             }
         }
 

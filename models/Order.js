@@ -27,7 +27,11 @@ const orderItemSchema = new mongoose.Schema({
       is24x7Delivery: { type: Boolean, default: false }
     }
   },
-  warehouseId: { type: String }
+  warehouseId: { type: String },
+  // Variant information
+  variantId: { type: String }, // ID of the selected variant
+  variantName: { type: String }, // Name/description of the selected variant
+  selectedVariant: { type: Object } // Complete variant object with all properties
 });
 
 const orderSchema = new mongoose.Schema({

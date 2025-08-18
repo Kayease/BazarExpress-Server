@@ -100,7 +100,14 @@ const createOrder = async (req, res) => {
     // Populate the order with product details
     const populatedOrder = await Order.findById(order._id)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({
+        path: 'items.productId',
+        select: 'name price image category brand locationName variants attributes',
+        populate: [
+          { path: 'brand', select: 'name' },
+          { path: 'category', select: 'name' }
+        ]
+      })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -137,7 +144,7 @@ const getUserOrders = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -217,7 +224,7 @@ const getAllOrders = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -308,7 +315,7 @@ const getOrderById = async (req, res) => {
     
     const order = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name')
       .populate('statusHistory.updatedBy', 'name email');
@@ -385,7 +392,7 @@ const updateOrderStatus = async (req, res) => {
 
     const updatedOrder = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('statusHistory.updatedBy', 'name email');
 
     res.json({
@@ -506,7 +513,7 @@ const getOrdersByStatus = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -733,7 +740,7 @@ const verifyDeliveryOtpAndUpdateStatus = async (req, res) => {
 
     const updatedOrder = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
-      .populate('items.productId', 'name price image category brand')
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('statusHistory.updatedBy', 'name email');
 
     res.json({
