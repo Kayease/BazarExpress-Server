@@ -115,7 +115,8 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
     // console.log('[Warehouse.getEligibleProductsByPincode] Called with:', { pincode, options });
     try {
     const Product = require('./Product');
-    const { page = 1, limit = 20, category, search } = options;
+    const Category = require('./Category');
+    const { page = 1, limit = 20, category, parentCategory, search } = options;
     // 1. Get eligible warehouses (custom + global)
     const { customWarehouses, globalWarehouses } = await this.findWarehousesByPincode(pincode);
         // console.log('[Warehouse.getEligibleProductsByPincode] customWarehouses:', customWarehouses.length, 'globalWarehouses:', globalWarehouses.length);
@@ -156,19 +157,51 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
             status: 'active',
             stock: { $gt: 0 }
         };
-        if (category) {
-            productQuery.category = category;
-            // console.log('[Warehouse.getEligibleProductsByPincode] Filtering by category:', category);
-        }
-        if (search) {
+        
+        // Handle category filtering
+        if (parentCategory) {
+            // If parentCategory is provided, get all subcategories and filter by them
+            const subcategories = await Category.find({ parentId: parentCategory }).select('_id');
+            const subcategoryIds = subcategories.map(sub => sub._id);
+            
+            // Also include the parent category itself
+            subcategoryIds.push(parentCategory);
+            
+            // Filter by category OR subcategory
             productQuery.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
+                { category: { $in: subcategoryIds } },
+                { subcategory: { $in: subcategoryIds } }
             ];
+            
+            //console.log('[Warehouse.getEligibleProductsByPincode] Filtering by parent category:', parentCategory, 'with subcategories:', subcategoryIds);
+        } else if (category) {
+            // If specific category is provided, filter by that category
+            productQuery.category = category;
+            console.log('[Warehouse.getEligibleProductsByPincode] Filtering by specific category:', category);
+        }
+        
+        if (search) {
+            // If we already have $or for parent category, merge with search
+            if (productQuery.$or) {
+                const searchOr = [
+                    { name: { $regex: search, $options: 'i' } },
+                    { description: { $regex: search, $options: 'i' } }
+                ];
+                productQuery.$and = [
+                    { $or: productQuery.$or },
+                    { $or: searchOr }
+                ];
+                delete productQuery.$or;
+            } else {
+                productQuery.$or = [
+                    { name: { $regex: search, $options: 'i' } },
+                    { description: { $regex: search, $options: 'i' } }
+                ];
+            }
             // console.log('[Warehouse.getEligibleProductsByPincode] Filtering by search:', search);
         }
         const skip = (parseInt(page) - 1) * parseInt(limit);
-        // console.log('[Warehouse.getEligibleProductsByPincode] Product query:', productQuery, '| Skip:', skip, '| Limit:', limit);
+        // console.log('[Warehouse.getEligibleProductsByPincode] Product query:', JSON.stringify(productQuery), '| Skip:', skip, '| Limit:', limit);
         // 3. Fetch products and total count
         const [products, totalProducts] = await Promise.all([
             Product.find(productQuery)

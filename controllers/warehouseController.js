@@ -236,7 +236,7 @@ exports.getProductsByPincode = async (req, res, next) => {
     // Detailed request log
     // console.log('[getProductsByPincode] Called with query:', JSON.stringify(req.query));
     try {
-        const { pincode, page = 1, limit = 20, category, search, mode = 'auto' } = req.query;
+        const { pincode, page = 1, limit = 20, category, parentCategory, search, mode = 'auto' } = req.query;
         
         if (!pincode || !/^\d{6}$/.test(pincode)) {
             return res.status(400).json({
@@ -246,7 +246,7 @@ exports.getProductsByPincode = async (req, res, next) => {
         }
         
         let result;
-        // console.log('[getProductsByPincode] Mode:', mode, '| Category:', category, '| Search:', search, '| Page:', page, '| Limit:', limit);
+        // console.log('[getProductsByPincode] Mode:', mode, '| Category:', category, '| ParentCategory:', parentCategory, '| Search:', search, '| Page:', page, '| Limit:', limit);
         
         if (mode === 'global') {
             // console.log('[getProductsByPincode] Fetching global warehouses for pincode:', pincode);
@@ -331,6 +331,7 @@ exports.getProductsByPincode = async (req, res, next) => {
                 page: parseInt(page),
                 limit: parseInt(limit),
                 category,
+                parentCategory,
                 search
             });
             // console.log('[getProductsByPincode] Eligible products result:', JSON.stringify(eligibleResult));

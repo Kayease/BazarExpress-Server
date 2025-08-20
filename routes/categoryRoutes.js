@@ -7,6 +7,7 @@ const { isAuth, hasPermission, canAccessSection } = require('../middleware/authM
 router.get('/', categoryController.getCategories);
 router.get('/subcategories/:parentId', categoryController.getSubcategoriesByParent);
 router.get('/paginated', categoryController.getCategoriesPaginated);
+router.get('/:id', categoryController.getCategoryById);
 
 // Admin routes with role-based access
 router.post('/', 
