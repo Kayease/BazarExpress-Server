@@ -36,11 +36,11 @@ const noticeController = require("./controllers/noticeController");
 const { cleanupExpiredCarts } = require("./middleware/abandonedCartMiddleware");
 
 const app = express();
-const port = process.env.PORT || 4000;
+const port = process.env.PORT;
 const MONGODB_URI = process.env.DB_URL;
 
 // Middleware
-const allowedOrigins = ['*',
+const allowedOrigins = [
   'http://localhost:3001',
   'http://localhost:3000',
   'https://bazarxpress.kayease.com',
