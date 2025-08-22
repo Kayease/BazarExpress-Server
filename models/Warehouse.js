@@ -116,7 +116,7 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
     try {
     const Product = require('./Product');
     const Category = require('./Category');
-    const { page = 1, limit = 20, category, parentCategory, search } = options;
+    const { page = 1, limit = 20, category, parentCategory, search, brand, sort, minPrice, maxPrice } = options;
     // 1. Get eligible warehouses (custom + global)
     const { customWarehouses, globalWarehouses } = await this.findWarehousesByPincode(pincode);
         // console.log('[Warehouse.getEligibleProductsByPincode] customWarehouses:', customWarehouses.length, 'globalWarehouses:', globalWarehouses.length);
@@ -200,8 +200,73 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
             }
             // console.log('[Warehouse.getEligibleProductsByPincode] Filtering by search:', search);
         }
+        
+        // Handle brand filtering
+        if (brand) {
+            try {
+                const brandIds = brand.split(',').map(id => id.trim()).filter(Boolean);
+                if (brandIds.length > 0) {
+                    productQuery.brand = { $in: brandIds };
+                    console.log('[Warehouse.getEligibleProductsByPincode] Filtering by brands:', brandIds);
+                }
+            } catch (error) {
+                console.error('[Warehouse.getEligibleProductsByPincode] Error parsing brand filter:', error);
+            }
+        }
+        
+        // Handle price filtering
+        if (minPrice || maxPrice) {
+            try {
+                productQuery.price = {};
+                if (minPrice && !isNaN(parseFloat(minPrice))) {
+                    productQuery.price.$gte = parseFloat(minPrice);
+                }
+                if (maxPrice && !isNaN(parseFloat(maxPrice))) {
+                    productQuery.price.$lte = parseFloat(maxPrice);
+                }
+                if (Object.keys(productQuery.price).length > 0) {
+                    console.log('[Warehouse.getEligibleProductsByPincode] Filtering by price range:', { minPrice, maxPrice });
+                } else {
+                    delete productQuery.price; // Remove empty price filter
+                }
+            } catch (error) {
+                console.error('[Warehouse.getEligibleProductsByPincode] Error parsing price filter:', error);
+            }
+        }
         const skip = (parseInt(page) - 1) * parseInt(limit);
         // console.log('[Warehouse.getEligibleProductsByPincode] Product query:', JSON.stringify(productQuery), '| Skip:', skip, '| Limit:', limit);
+        // Handle sorting
+        let sortQuery = { createdAt: -1 }; // default sort
+        if (sort) {
+            try {
+                switch (sort) {
+                    case 'price-low':
+                        sortQuery = { price: 1 };
+                        break;
+                    case 'price-high':
+                        sortQuery = { price: -1 };
+                        break;
+                    case 'newest':
+                        sortQuery = { createdAt: -1 };
+                        break;
+                    case 'rating':
+                        sortQuery = { rating: -1 };
+                        break;
+                    case 'popularity':
+                        sortQuery = { popularity: -1 };
+                        break;
+                    case 'relevance':
+                    default:
+                        sortQuery = { createdAt: -1 };
+                        break;
+                }
+                console.log('[Warehouse.getEligibleProductsByPincode] Sorting by:', sort, 'with query:', sortQuery);
+            } catch (error) {
+                console.error('[Warehouse.getEligibleProductsByPincode] Error parsing sort parameter:', error);
+                sortQuery = { createdAt: -1 }; // fallback to default
+            }
+        }
+        
         // 3. Fetch products and total count
         const [products, totalProducts] = await Promise.all([
             Product.find(productQuery)
@@ -211,7 +276,7 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
                 .populate('warehouse')
                 .skip(skip)
                 .limit(parseInt(limit))
-                .sort({ createdAt: -1 }),
+                .sort(sortQuery),
             Product.countDocuments(productQuery)
         ]);
         // console.log('[Warehouse.getEligibleProductsByPincode] Products found:', products.length, 'Total:', totalProducts);

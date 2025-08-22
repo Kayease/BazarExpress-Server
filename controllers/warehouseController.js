@@ -236,7 +236,7 @@ exports.getProductsByPincode = async (req, res, next) => {
     // Detailed request log
     // console.log('[getProductsByPincode] Called with query:', JSON.stringify(req.query));
     try {
-        const { pincode, page = 1, limit = 20, category, parentCategory, search, mode = 'auto' } = req.query;
+        const { pincode, page = 1, limit = 20, category, parentCategory, search, mode = 'auto', brand, sort, minPrice, maxPrice } = req.query;
         
         if (!pincode || !/^\d{6}$/.test(pincode)) {
             return res.status(400).json({
@@ -295,8 +295,73 @@ exports.getProductsByPincode = async (req, res, next) => {
                 ];
             }
             
+            // Handle brand filtering
+            if (brand) {
+                try {
+                    const brandIds = brand.split(',').map(id => id.trim()).filter(Boolean);
+                    if (brandIds.length > 0) {
+                        productQuery.brand = { $in: brandIds };
+                        console.log('[getProductsByPincode] Filtering by brands:', brandIds);
+                    }
+                } catch (error) {
+                    console.error('[getProductsByPincode] Error parsing brand filter:', error);
+                }
+            }
+            
+            // Handle price filtering
+            if (minPrice || maxPrice) {
+                try {
+                    productQuery.price = {};
+                    if (minPrice && !isNaN(parseFloat(minPrice))) {
+                        productQuery.price.$gte = parseFloat(minPrice);
+                    }
+                    if (maxPrice && !isNaN(parseFloat(maxPrice))) {
+                        productQuery.price.$lte = parseFloat(maxPrice);
+                    }
+                    if (Object.keys(productQuery.price).length > 0) {
+                        console.log('[getProductsByPincode] Filtering by price range:', { minPrice, maxPrice });
+                    } else {
+                        delete productQuery.price; // Remove empty price filter
+                    }
+                } catch (error) {
+                    console.error('[getProductsByPincode] Error parsing price filter:', error);
+                }
+            }
+            
             const skip = (parseInt(page) - 1) * parseInt(limit);
             // console.log('[getProductsByPincode] Product query:', JSON.stringify(productQuery), '| Skip:', skip, '| Limit:', limit);
+            // Handle sorting
+            let sortQuery = { createdAt: -1 }; // default sort
+            if (sort) {
+                try {
+                    switch (sort) {
+                        case 'price-low':
+                            sortQuery = { price: 1 };
+                            break;
+                        case 'price-high':
+                            sortQuery = { price: -1 };
+                            break;
+                        case 'newest':
+                            sortQuery = { createdAt: -1 };
+                            break;
+                        case 'rating':
+                            sortQuery = { rating: -1 };
+                            break;
+                        case 'popularity':
+                            sortQuery = { popularity: -1 };
+                            break;
+                        case 'relevance':
+                        default:
+                            sortQuery = { createdAt: -1 };
+                            break;
+                    }
+                    console.log('[getProductsByPincode] Sorting by:', sort, 'with query:', sortQuery);
+                } catch (error) {
+                    console.error('[getProductsByPincode] Error parsing sort parameter:', error);
+                    sortQuery = { createdAt: -1 }; // fallback to default
+                }
+            }
+            
             const [products, totalProducts] = await Promise.all([
                 Product.find(productQuery)
                     .populate('category')
@@ -305,7 +370,7 @@ exports.getProductsByPincode = async (req, res, next) => {
                     .populate('warehouse')
                     .skip(skip)
                     .limit(parseInt(limit))
-                    .sort({ createdAt: -1 }),
+                    .sort(sortQuery),
                 Product.countDocuments(productQuery)
             ]);
             // console.log('[getProductsByPincode] Product query result:', JSON.stringify({ products, totalProducts }));
@@ -332,7 +397,11 @@ exports.getProductsByPincode = async (req, res, next) => {
                 limit: parseInt(limit),
                 category,
                 parentCategory,
-                search
+                search,
+                brand,
+                sort,
+                minPrice,
+                maxPrice
             });
             // console.log('[getProductsByPincode] Eligible products result:', JSON.stringify(eligibleResult));
             result = {
