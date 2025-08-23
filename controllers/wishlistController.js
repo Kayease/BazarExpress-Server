@@ -6,7 +6,17 @@ const getWishlist = async (req, res) => {
     try {
         const user = await User.findById(req.user.id).populate({
             path: 'wishlist.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                }
+            ]
         });
 
         if (!user) {
@@ -89,7 +99,17 @@ const addToWishlist = async (req, res) => {
         // Populate the wishlist for response
         await user.populate({
             path: 'wishlist.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                }
+            ]
         });
 
         res.json({ 
@@ -139,7 +159,17 @@ const removeFromWishlist = async (req, res) => {
         // Populate the wishlist for response
         await user.populate({
             path: 'wishlist.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                }
+            ]
         });
 
         res.json({ 
@@ -239,7 +269,17 @@ const syncWishlist = async (req, res) => {
         // Populate the wishlist for response
         await user.populate({
             path: 'wishlist.productId',
-            model: 'Product'
+            model: 'Product',
+            populate: [
+                {
+                    path: 'category',
+                    model: 'Category'
+                },
+                {
+                    path: 'brand',
+                    model: 'Brand'
+                }
+            ]
         });
 
         res.json({ 
