@@ -241,15 +241,31 @@ exports.applyPromocode = async(req, res) => {
 // Get available promocodes for user
 exports.getAvailablePromocodes = async(req, res) => {
     try {
-        console.log('Available promocodes request:', req.query);
         const { userId, cartItems = [], cartTotal = 0 } = req.query;
         const cartTotalNum = parseFloat(cartTotal) || 0;
+        
+        // Parse cartItems if it's a string
+        let parsedCartItems = cartItems;
+        if (typeof cartItems === 'string') {
+            try {
+                parsedCartItems = JSON.parse(cartItems);
+            } catch (e) {
+                console.warn('Failed to parse cartItems:', e);
+                parsedCartItems = [];
+            }
+        }
+        
+
         
         // Find all active promocodes
         const now = new Date();
         const promocodes = await Promocode.find({ 
             status: true
         }).sort({ discount: -1 });
+
+
+        
+
 
         const availablePromocodes = [];
         const almostAvailablePromocodes = [];
@@ -303,13 +319,40 @@ exports.getAvailablePromocodes = async(req, res) => {
                         message: `Save ₹${promoInfo.potentialDiscount} on this order`
                     });
                 } else {
-                    // For specific categories/brands/products, we'll mark as applicable for now
-                    // In a real scenario, you'd check cart items here
-                    availablePromocodes.push({
-                        ...promoInfo,
-                        status: 'applicable',
-                        message: `Save ₹${promoInfo.potentialDiscount} on this order`
-                    });
+                    // For specific categories/brands/products, check if any cart items match
+                    let isApplicable = false;
+                    
+                    if (parsedCartItems.length > 0) {
+                        if (promocode.appliesTo === 'categories' && promocode.categories && promocode.categories.length > 0) {
+                            isApplicable = parsedCartItems.some(item => 
+                                promocode.categories.some(cat => cat._id.toString() === item.categoryId)
+                            );
+                        } else if (promocode.appliesTo === 'brands' && promocode.brands && promocode.brands.length > 0) {
+                            isApplicable = parsedCartItems.some(item => 
+                                promocode.brands.some(brand => brand._id.toString() === item.brandId)
+                            );
+                        } else if (promocode.appliesTo === 'products' && promocode.products && promocode.products.length > 0) {
+                            isApplicable = parsedCartItems.some(item => 
+                                promocode.products.some(product => product._id.toString() === item.productId)
+                            );
+                        }
+                    }
+                    
+                                            if (isApplicable) {
+                            availablePromocodes.push({
+                                ...promoInfo,
+                                status: 'applicable',
+                                message: `Save ₹${promoInfo.potentialDiscount} on this order`
+                            });
+                        } else {
+                            // Add promocodes that don't match as almost available
+                            almostAvailablePromocodes.push({
+                                ...promoInfo,
+                                status: 'almost_available',
+                                amountNeeded: 0,
+                                message: `Add matching items to unlock this offer`
+                            });
+                        }
                 }
             } else {
                 // Promocode not applicable due to minimum order amount
@@ -322,6 +365,8 @@ exports.getAvailablePromocodes = async(req, res) => {
                 });
             }
         }
+
+
 
         res.json({
             available: availablePromocodes.slice(0, 3), // Show top 3 available

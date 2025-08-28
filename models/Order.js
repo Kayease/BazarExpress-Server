@@ -125,7 +125,18 @@ const orderSchema = new mongoose.Schema({
     paymentMethod: { type: String }, // upi, card, wallet, netbanking for online payments
     status: { type: String, enum: ['pending', 'prepaid', 'paid', 'refunded'], default: 'pending' },
     transactionId: { type: String },
-    paidAt: { type: Date }
+    razorpayOrderId: { type: String },
+    razorpaySignature: { type: String },
+    paidAt: { type: Date },
+    paymentDetails: {
+      amount: { type: Number },
+      currency: { type: String },
+      method: { type: String },
+      bank: { type: String },
+      wallet: { type: String },
+      vpa: { type: String },
+      card_id: { type: String }
+    }
   },
   
   // Warehouse Information
@@ -197,7 +208,8 @@ const orderSchema = new mongoose.Schema({
     cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     refundAmount: { type: Number },
     refundStatus: { type: String, enum: ['pending', 'processed', 'failed'] },
-    refundedAt: { type: Date }
+    refundedAt: { type: Date },
+    refundId: { type: String } // Razorpay refund ID
   }
 });
 

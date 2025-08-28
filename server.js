@@ -30,6 +30,7 @@ const reviewRoutes = require("./routes/reviewRoutes");
 const abandonedCartRoutes = require("./routes/abandonedCartRoutes");
 const searchGapRoutes = require("./routes/searchGapRoutes");
 const stockTransferRoutes = require("./routes/stockTransferRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
 const noticeController = require("./controllers/noticeController");
 
 // Import abandoned cart middleware
@@ -92,6 +93,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/abandoned-carts", abandonedCartRoutes);
 app.use("/api/search-gaps", searchGapRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
+app.use("/api/payments", paymentRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
 
