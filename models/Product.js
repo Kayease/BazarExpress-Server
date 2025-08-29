@@ -23,7 +23,7 @@ const productSchema = new mongoose.Schema({
     lowStockThreshold: { type: Number, default: 0 },
     weight: { type: Number },
     dimensions: {
-        l: { type: String },
+        l: { type: String },    
         w: { type: String },
         h: { type: String },
     },

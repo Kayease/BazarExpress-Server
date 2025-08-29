@@ -6,6 +6,7 @@ const {
 } = require('../services/razorpayService');
 const Order = require('../models/Order');
 const User = require('../models/User');
+const { updateProductStock, restoreProductStock } = require('../utils/stockManager');
 
 /**
  * Create Razorpay order for payment
@@ -203,6 +204,14 @@ const verifyPayment = async (req, res) => {
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
+    // After successful order creation, update product stock for each item
+    try {
+      await updateProductStock(orderData.items);
+    } catch (stockErr) {
+      console.error('Stock update error after online payment order creation:', stockErr);
+      // Do not fail the order response on stock update issues, but log for investigation
+    }
+
     res.json({
       success: true,
       message: 'Payment verified and order created successfully',
@@ -313,6 +322,14 @@ const processRefund = async (req, res) => {
 
     // Update order status
     order.addStatusHistory('refunded', req.user.id, `Refund processed: ₹${refundResult.refund.amount / 100}`);
+
+    // Restore product stock when order is refunded
+    try {
+      await restoreProductStock(order.items);
+    } catch (stockErr) {
+      console.error('Stock restore error after order refund:', stockErr);
+      // Log error but don't fail the refund process
+    }
 
     await order.save();
 

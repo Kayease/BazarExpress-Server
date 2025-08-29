@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Product = require('../models/Product');
 const crypto = require('crypto');
 const { sendDeliveryOTP } = require('../services/smsService');
+const { updateProductStock, restoreProductStock } = require('../utils/stockManager');
 
 // Store for delivery OTPs (in production, use Redis or database)
 const deliveryOtpStore = {};
@@ -110,6 +111,14 @@ const createOrder = async (req, res) => {
       })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
+
+    // After successful order creation, update product stock for each item
+    try {
+      await updateProductStock(items);
+    } catch (stockErr) {
+      console.error('Stock update error after order creation:', stockErr);
+      // Do not fail the order response on stock update issues, but log for investigation
+    }
 
     res.status(201).json({
       success: true,
@@ -370,6 +379,14 @@ const updateOrderStatus = async (req, res) => {
     // Update payment status based on order status and payment method
     if (status === 'cancelled' || status === 'refunded') {
       order.paymentInfo.status = 'refunded';
+      
+      // Restore product stock when order is cancelled or refunded
+      try {
+        await restoreProductStock(order.items);
+      } catch (stockErr) {
+        console.error('Stock restore error after order cancellation/refund:', stockErr);
+        // Log error but don't fail the status update
+      }
     } else if (status === 'delivered' && order.paymentInfo.method === 'cod') {
       order.paymentInfo.status = 'paid';
     } else if (order.paymentInfo.method === 'cod') {
@@ -442,6 +459,14 @@ const cancelOrder = async (req, res) => {
 
     // Update payment status to refunded when order is cancelled
     order.paymentInfo.status = 'refunded';
+
+    // Restore product stock when order is cancelled
+    try {
+      await restoreProductStock(order.items);
+    } catch (stockErr) {
+      console.error('Stock restore error after order cancellation:', stockErr);
+      // Log error but don't fail the cancellation
+    }
 
     await order.save();
 
