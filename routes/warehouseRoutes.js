@@ -40,6 +40,13 @@ router.delete('/:id',
     warehouseController.deleteWarehouse
 );
 
+// Admin route for checking pincode availability
+router.get('/check-pincode-availability', 
+    isAuth, 
+    hasPermission(['admin', 'order_warehouse_management']),
+    warehouseController.checkPincodeAvailability
+);
+
 // Public routes for delivery system
 router.post('/check-pincode', warehouseController.checkPincodeDelivery);
 router.get('/products-by-pincode', warehouseController.getProductsByPincode);

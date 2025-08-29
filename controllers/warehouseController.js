@@ -1,5 +1,6 @@
 const Warehouse = require("../models/Warehouse");
 const Product = require("../models/Product");
+const { checkPincodeConflicts, validatePincodes } = require("../utils/pincodeValidator");
 
 // TODO: Replace with real user auth, for now use req.body.userId or req.user.id
 exports.createWarehouse = async(req, res, next) => {
@@ -29,6 +30,28 @@ exports.createWarehouse = async(req, res, next) => {
             return res
                 .status(400)
                 .json({ error: "Missing required fields: name, address, userId" });
+        }
+
+        // Validate pincode format and uniqueness
+        if (deliverySettings.deliveryPincodes && deliverySettings.deliveryPincodes.length > 0) {
+            // Validate pincode format
+            const validation = validatePincodes(deliverySettings.deliveryPincodes);
+            if (!validation.isValid) {
+                return res.status(400).json({
+                    error: "Invalid pincode format",
+                    message: validation.error
+                });
+            }
+
+            // Check for conflicts with other warehouses
+            const conflictCheck = await checkPincodeConflicts(deliverySettings.deliveryPincodes);
+            if (conflictCheck.hasConflicts) {
+                return res.status(400).json({
+                    error: "Pincode conflict detected",
+                    message: "Some pincodes are already assigned to other warehouses",
+                    conflicts: conflictCheck.conflicts
+                });
+            }
         }
 
         // Create warehouse with actual form values
@@ -91,6 +114,29 @@ exports.updateWarehouse = async(req, res, next) => {
     try {
         const { id } = req.params;
         const updates = req.body;
+        
+        // Validate pincode format and uniqueness for updates
+        if (updates.deliverySettings && updates.deliverySettings.deliveryPincodes && updates.deliverySettings.deliveryPincodes.length > 0) {
+            // Validate pincode format
+            const validation = validatePincodes(updates.deliverySettings.deliveryPincodes);
+            if (!validation.isValid) {
+                return res.status(400).json({
+                    error: "Invalid pincode format",
+                    message: validation.error
+                });
+            }
+
+            // Check for conflicts with other warehouses (excluding current warehouse)
+            const conflictCheck = await checkPincodeConflicts(updates.deliverySettings.deliveryPincodes, id);
+            if (conflictCheck.hasConflicts) {
+                return res.status(400).json({
+                    error: "Pincode conflict detected",
+                    message: "Some pincodes are already assigned to other warehouses",
+                    conflicts: conflictCheck.conflicts
+                });
+            }
+        }
+        
         updates.updatedAt = new Date();
         const updated = await Warehouse.updateWarehouse(id, updates);
         res.json(updated);
@@ -163,6 +209,37 @@ exports.deleteWarehouse = async(req, res, next) => {
         console.error('Error deleting warehouse:', err);
         res.status(500).json({
             error: "Error deleting warehouse",
+            details: err.message
+        });
+    }
+};
+
+// Check pincode availability for warehouse assignment
+exports.checkPincodeAvailability = async (req, res, next) => {
+    try {
+        const { pincode, excludeWarehouseId } = req.query;
+        
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Valid 6-digit pincode is required'
+            });
+        }
+        
+        const conflictCheck = await checkPincodeConflicts([pincode], excludeWarehouseId);
+        
+        res.json({
+            success: true,
+            pincode,
+            isAvailable: !conflictCheck.hasConflicts,
+            conflicts: conflictCheck.conflicts
+        });
+        
+    } catch (err) {
+        console.error('Error checking pincode availability:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to check pincode availability',
             details: err.message
         });
     }

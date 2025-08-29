@@ -13,6 +13,69 @@ function generateDeliveryOtp() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+// Validate status transition based on business rules
+function validateStatusTransition(order, newStatus) {
+  const currentStatus = order.status;
+  const paymentMethod = order.paymentInfo.method; // 'cod' or 'online'
+
+  // For CANCELLED status validation
+  if (newStatus === 'cancelled') {
+    // 1. Delivered orders (any payment method) cannot be cancelled
+    if (currentStatus === 'delivered') {
+      return 'Delivered orders cannot be cancelled';
+    }
+
+    // 2. Online payment orders (new/processing/shipped) cannot be cancelled
+    if (paymentMethod === 'online' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+      return 'Online payment orders cannot be cancelled';
+    }
+
+    // 3. Refunded orders (any payment method) cannot be cancelled
+    if (currentStatus === 'refunded') {
+      return 'Refunded orders cannot be cancelled';
+    }
+
+    // 4. Only Cash on Delivery orders (new/processing/shipped) can be cancelled
+    if (paymentMethod === 'cod' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+      return null; // Valid transition
+    }
+
+    // If none of the above conditions are met, it's invalid
+    if (paymentMethod === 'cod' && !['new', 'processing', 'shipped'].includes(currentStatus)) {
+      return 'Cash on Delivery orders can only be cancelled from new, processing, or shipped status';
+    }
+  }
+
+  // For REFUNDED status validation
+  if (newStatus === 'refunded') {
+    // 1. Online payment orders (new/processing/shipped) can be refunded
+    if (paymentMethod === 'online' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+      return null; // Valid transition
+    }
+
+    // 2. Delivered orders (any payment method) can be refunded
+    if (currentStatus === 'delivered') {
+      return null; // Valid transition
+    }
+
+    // 3. Cancelled orders (any payment method) cannot be refunded
+    if (currentStatus === 'cancelled') {
+      return 'Cancelled orders cannot be refunded';
+    }
+
+    // 4. Cash on Delivery orders (new/processing/shipped) cannot be refunded
+    if (paymentMethod === 'cod' && ['new', 'processing', 'shipped'].includes(currentStatus)) {
+      return 'Cash on Delivery orders cannot be refunded unless they are delivered';
+    }
+
+    // If none of the valid conditions are met, it's invalid
+    return 'Invalid refund request for current order status and payment method';
+  }
+
+  // For other status transitions, return null (no validation error)
+  return null;
+}
+
 // Create a new order
 const createOrder = async (req, res) => {
   try {
@@ -373,6 +436,12 @@ const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    // Validate status transition based on business rules
+    const validationError = validateStatusTransition(order, status);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     // Add status history
     order.addStatusHistory(status, req.user.id, note);
 
@@ -444,9 +513,10 @@ const cancelOrder = async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Check if order can be cancelled
-    if (['delivered', 'cancelled', 'refunded'].includes(order.status)) {
-      return res.status(400).json({ error: 'Order cannot be cancelled' });
+    // Validate if order can be cancelled using the same business rules
+    const validationError = validateStatusTransition(order, 'cancelled');
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
     }
 
     // Update order status and cancellation info
