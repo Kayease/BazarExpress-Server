@@ -216,7 +216,7 @@ const getUserOrders = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes returnable returnWindow', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -296,7 +296,7 @@ const getAllOrders = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes returnable returnWindow', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -387,7 +387,7 @@ const getOrderById = async (req, res) => {
     
     const order = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
-      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes returnable returnWindow', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name')
       .populate('statusHistory.updatedBy', 'name email');
@@ -478,7 +478,7 @@ const updateOrderStatus = async (req, res) => {
 
     const updatedOrder = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
-      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes returnable returnWindow', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('statusHistory.updatedBy', 'name email');
 
     res.json({
@@ -608,7 +608,7 @@ const getOrdersByStatus = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('userId', 'name email phone')
-      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes returnable returnWindow', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('items.brandId', 'name')
       .populate('items.categoryId', 'name');
 
@@ -835,7 +835,7 @@ const verifyDeliveryOtpAndUpdateStatus = async (req, res) => {
 
     const updatedOrder = await Order.findOne({ orderId })
       .populate('userId', 'name email phone')
-      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
+      .populate({ path: 'items.productId', select: 'name price image category brand locationName variants attributes returnable returnWindow', populate: [{ path: 'brand', select: 'name' }, { path: 'category', select: 'name' }] })
       .populate('statusHistory.updatedBy', 'name email');
 
     res.json({
