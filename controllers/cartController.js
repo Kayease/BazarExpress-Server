@@ -106,6 +106,23 @@ const addToCart = async (req, res) => {
 
         if (existingItemIndex > -1) {
             // Update quantity if item exists (no warehouse validation needed for existing items)
+            // Stock validation: prevent exceeding available stock
+            const variants = product.variants || {};
+            let available = Number(product.stock) || 0;
+            if (variantId && Object.keys(variants).length > 0) {
+                const v = variants[variantId] || {};
+                available = Number(v.stock) || 0;
+            }
+            const desiredQty = (user.cart[existingItemIndex].quantity || 0) + quantity;
+            if (desiredQty > available) {
+                return res.status(400).json({
+                    error: 'QUANTITY_EXCEEDS_STOCK',
+                    message: `Only ${available} in stock`,
+                    availableStock: available,
+                    productId,
+                    variantId: variantId || null,
+                });
+            }
             user.cart[existingItemIndex].quantity += quantity;
         } else {
             // Warehouse validation for new items only
@@ -253,6 +270,26 @@ const updateCartItem = async (req, res) => {
             // Remove item if quantity is 0
             user.cart.splice(cartItemIndex, 1);
         } else {
+            // Stock validation: prevent exceeding available stock on update
+            const product = await Product.findById(productId).lean();
+            if (!product) {
+                return res.status(404).json({ error: 'Product not found' });
+            }
+            const variants = product.variants || {};
+            let available = Number(product.stock) || 0;
+            if (variantId && Object.keys(variants).length > 0) {
+                const v = variants[variantId] || {};
+                available = Number(v.stock) || 0;
+            }
+            if (quantity > available) {
+                return res.status(400).json({
+                    error: 'QUANTITY_EXCEEDS_STOCK',
+                    message: `Only ${available} in stock`,
+                    availableStock: available,
+                    productId,
+                    variantId: variantId || null,
+                });
+            }
             // Update quantity
             user.cart[cartItemIndex].quantity = quantity;
         }

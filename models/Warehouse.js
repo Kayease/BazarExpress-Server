@@ -116,7 +116,7 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
     try {
     const Product = require('./Product');
     const Category = require('./Category');
-    const { page = 1, limit = 20, category, parentCategory, search, brand, sort, minPrice, maxPrice } = options;
+    const { page = 1, limit = 20, category, parentCategory, search, brand, sort, minPrice, maxPrice, includeOutOfStock } = options;
     // 1. Get eligible warehouses (custom + global)
     const { customWarehouses, globalWarehouses } = await this.findWarehousesByPincode(pincode);
         // console.log('[Warehouse.getEligibleProductsByPincode] customWarehouses:', customWarehouses.length, 'globalWarehouses:', globalWarehouses.length);
@@ -154,9 +154,13 @@ warehouseSchema.statics.getEligibleProductsByPincode = async function(pincode, o
         // 2. Build product query
         let productQuery = {
             warehouse: { $in: warehouseIds },
-            status: 'active',
-            stock: { $gt: 0 }
+            status: 'active'
         };
+        
+        // Only filter by stock if includeOutOfStock is not true
+        if (includeOutOfStock !== 'true') {
+            productQuery.stock = { $gt: 0 };
+        }
         
         // Handle category filtering
         if (parentCategory) {

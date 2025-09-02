@@ -313,7 +313,7 @@ exports.getProductsByPincode = async (req, res, next) => {
     // Detailed request log
     // console.log('[getProductsByPincode] Called with query:', JSON.stringify(req.query));
     try {
-        const { pincode, page = 1, limit = 20, category, parentCategory, search, mode = 'auto', brand, sort, minPrice, maxPrice } = req.query;
+        const { pincode, page = 1, limit = 20, category, parentCategory, search, mode = 'auto', brand, sort, minPrice, maxPrice, includeOutOfStock } = req.query;
         
         if (!pincode || !/^\d{6}$/.test(pincode)) {
             return res.status(400).json({
@@ -356,9 +356,13 @@ exports.getProductsByPincode = async (req, res, next) => {
             
             let productQuery = {
                 warehouse: { $in: warehouseIds },
-                status: 'active',
-                stock: { $gt: 0 }
+                status: 'active'
             };
+            
+            // Only filter by stock if includeOutOfStock is not true
+            if (includeOutOfStock !== 'true') {
+                productQuery.stock = { $gt: 0 };
+            }
             
             if (category) {
                 productQuery.category = category;
@@ -478,7 +482,8 @@ exports.getProductsByPincode = async (req, res, next) => {
                 brand,
                 sort,
                 minPrice,
-                maxPrice
+                maxPrice,
+                includeOutOfStock
             });
             // console.log('[getProductsByPincode] Eligible products result:', JSON.stringify(eligibleResult));
             result = {

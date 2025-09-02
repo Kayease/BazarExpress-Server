@@ -31,6 +31,7 @@ const abandonedCartRoutes = require("./routes/abandonedCartRoutes");
 const searchGapRoutes = require("./routes/searchGapRoutes");
 const stockTransferRoutes = require("./routes/stockTransferRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const returnRoutes = require("./routes/returnRoutes");
 const noticeController = require("./controllers/noticeController");
 
 // Import abandoned cart middleware
@@ -94,8 +95,11 @@ app.use("/api/abandoned-carts", abandonedCartRoutes);
 app.use("/api/search-gaps", searchGapRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/returns", returnRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
+// Stock SSE/availability routes
+app.use("/api/stock", require("./routes/stockRoutes"));
 
 // Add abandoned cart middleware for cleanup only
 app.use(cleanupExpiredCarts);

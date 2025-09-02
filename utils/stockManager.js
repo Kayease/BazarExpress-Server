@@ -167,6 +167,23 @@ const updateProductStock = async (items) => {
             } 
           });
 
+          // Broadcast stock change via SSE
+          try {
+            const { broadcastStockUpdate } = require('./stockEvents');
+            const variantStocks = Object.keys(updatedVariants).reduce((acc, key) => {
+              const v = updatedVariants[key] || {};
+              acc[key] = Number(v.stock) || 0;
+              return acc;
+            }, {});
+            broadcastStockUpdate({
+              productId: product._id.toString(),
+              stock: totalVariantStock,
+              variantStocks,
+            });
+          } catch (e) {
+            console.error('Failed to broadcast variant stock update', e);
+          }
+
           console.log(`✅ Successfully updated variant stock for ${product.name}`);
         } else {
           console.log(`❌ Could not find matching variant for product ${product.name}`);
@@ -185,6 +202,17 @@ const updateProductStock = async (items) => {
 
         if (newStock !== currentStock) {
           await Product.findByIdAndUpdate(product._id, { $set: { stock: newStock } });
+          // Broadcast stock change via SSE
+          try {
+            const { broadcastStockUpdate } = require('./stockEvents');
+            broadcastStockUpdate({
+              productId: product._id.toString(),
+              stock: newStock,
+              variantStocks: {},
+            });
+          } catch (e) {
+            console.error('Failed to broadcast non-variant stock update', e);
+          }
           console.log(`✅ Successfully updated non-variant stock for ${product.name}`);
         }
       }

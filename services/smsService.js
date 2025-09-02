@@ -58,7 +58,23 @@ const sendDeliveryOTP = async (customerPhone, otp, orderId) => {
   return await sendSMS(customerPhone, message);
 };
 
+/**
+ * Send pickup OTP to customer for return requests
+ * @param {string} customerPhone - Customer's phone number
+ * @param {string} otp - 4-digit OTP
+ * @param {string} returnId - Return ID
+ * @returns {Promise<boolean>} - Success status
+ */
+const sendPickupOTP = async (customerPhone, otp, returnId) => {
+  // Use the same DLT template as authentication system due to template limitations
+  const message = `Use ${otp} as One Time Password (OTP) to Get your Pie Certificates HTL`;
+  
+  console.log(`Sending pickup OTP to ${customerPhone} for return ${returnId} using auth template`);
+  return await sendSMS(customerPhone, message);
+};
+
 module.exports = {
   sendSMS,
-  sendDeliveryOTP
+  sendDeliveryOTP,
+  sendPickupOTP
 };
