@@ -91,13 +91,18 @@ exports.getWarehouses = async(req, res, next) => {
         if ((req.user.role === 'order_warehouse_management' || req.user.role === 'product_inventory_management') && req.assignedWarehouseIds) {
             warehouses = await Warehouse.find({ _id: { $in: req.assignedWarehouseIds } });
         } else if (req.user.role === 'delivery_boy') {
-            // For delivery boys, get warehouses from orders assigned to them
-            const Order = require('../models/Order');
-            const assignedOrders = await Order.find({ 'assignedDeliveryBoy.id': req.user.id }).distinct('warehouseInfo.warehouseId');
-            if (assignedOrders.length > 0) {
-                warehouses = await Warehouse.find({ _id: { $in: assignedOrders } });
+            // For delivery boys, prefer admin-assigned warehouses; fallback to warehouses from assigned orders
+            if (req.user.assignedWarehouses && req.user.assignedWarehouses.length > 0) {
+                const assignedIds = req.user.assignedWarehouses.map(w => w._id);
+                warehouses = await Warehouse.find({ _id: { $in: assignedIds } });
             } else {
-                warehouses = []; // No warehouses if no orders assigned
+                const Order = require('../models/Order');
+                const assignedOrders = await Order.find({ 'assignedDeliveryBoy.id': req.user.id }).distinct('warehouseInfo.warehouseId');
+                if (assignedOrders.length > 0) {
+                    warehouses = await Warehouse.find({ _id: { $in: assignedOrders } });
+                } else {
+                    warehouses = [];
+                }
             }
         } else if (userId) {
             warehouses = await Warehouse.getWarehousesByUser(userId);

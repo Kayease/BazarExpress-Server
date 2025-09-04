@@ -31,7 +31,10 @@ const orderItemSchema = new mongoose.Schema({
   // Variant information
   variantId: { type: String }, // ID of the selected variant
   variantName: { type: String }, // Name/description of the selected variant
-  selectedVariant: { type: Object } // Complete variant object with all properties
+  selectedVariant: { type: Object }, // Complete variant object with all properties
+  // Return/refund flags for this specific order item
+  refundStatus: { type: String, enum: ['refunded'], default: undefined },
+  refundedAt: { type: Date }
 });
 
 const orderSchema = new mongoose.Schema({
@@ -236,14 +239,35 @@ orderSchema.statics.generateOrderId = function() {
 
 // Instance method to add status history
 orderSchema.methods.addStatusHistory = function(status, updatedBy, note = '') {
-  this.statusHistory.push({
-    status,
-    updatedBy,
-    note,
-    timestamp: new Date()
-  });
+  const now = new Date();
+  // Find the most recent entry for the same status
+  let lastSameStatusIndex = -1;
+  for (let i = this.statusHistory.length - 1; i >= 0; i--) {
+    if (this.statusHistory[i]?.status === status) {
+      lastSameStatusIndex = i;
+      break;
+    }
+  }
+
+  if (lastSameStatusIndex !== -1) {
+    // Update timestamp (and metadata) instead of adding a duplicate entry
+    this.statusHistory[lastSameStatusIndex].timestamp = now;
+    this.statusHistory[lastSameStatusIndex].updatedBy = updatedBy;
+    if (note) {
+      this.statusHistory[lastSameStatusIndex].note = note;
+    }
+  } else {
+    // No prior entry of same status; add a fresh one
+    this.statusHistory.push({
+      status,
+      updatedBy,
+      note,
+      timestamp: now
+    });
+  }
+
   this.status = status;
-  this.updatedAt = new Date();
+  this.updatedAt = now;
 };
 
 // Instance method to calculate total (rounded to avoid decimal payments)

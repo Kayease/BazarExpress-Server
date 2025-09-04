@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { isAuth, hasPermission } = require('../middleware/authMiddleware');
+const { isAuth, hasPermission, hasWarehouseAccess } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const Warehouse = require('../models/Warehouse');
 
@@ -10,6 +10,7 @@ const router = express.Router();
 router.get('/', 
     isAuth, 
     hasPermission(['admin', 'order_warehouse_management', 'customer_support_executive']),
+    hasWarehouseAccess,
     async (req, res) => {
         try {
             const page = parseInt(req.query.page) || 1;

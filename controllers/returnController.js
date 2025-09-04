@@ -16,7 +16,7 @@ function generatePickupOtp() {
 // Create a new return request
 const createReturnRequest = async (req, res) => {
   try {
-    const { orderId, items, returnReason, pickupAddress, pickupInstructions } = req.body;
+    const { orderId, items, returnReason, pickupAddress, pickupInstructions, refundPreference } = req.body;
     const userId = req.user.id;
 
     // Validate the order exists and belongs to the user
@@ -43,6 +43,16 @@ const createReturnRequest = async (req, res) => {
     const invalidItems = items.filter(item => !orderItemIds.includes(item.itemId));
     if (invalidItems.length > 0) {
       return res.status(400).json({ error: 'Some items are not part of this order' });
+    }
+
+    // Prevent duplicate return requests for the same order items (ever)
+    const requestedOrderItemIds = items.map(it => it.itemId);
+    const existingForItems = await Return.find({
+      orderId: order.orderId,
+      'items.orderItemId': { $in: requestedOrderItemIds }
+    }).select('_id items.orderItemId status');
+    if (existingForItems && existingForItems.length > 0) {
+      return res.status(400).json({ error: 'Return request already exists for one or more selected items and cannot be submitted again' });
     }
 
     // Check if items are still within return window
@@ -120,6 +130,7 @@ const createReturnRequest = async (req, res) => {
         variantId: orderItem.variantId,
         variantName: orderItem.variantName,
         selectedVariant: orderItem.selectedVariant,
+        orderItemId: orderItem._id,
         returnReason: returnItem.reason || returnReason,
         returnStatus: 'requested'
       };
@@ -149,7 +160,13 @@ const createReturnRequest = async (req, res) => {
         warehouseId: order.warehouseInfo.warehouseId,
         warehouseName: order.warehouseInfo.warehouseName,
         warehouseAddress: order.warehouseInfo.warehouseAddress
-      }
+      },
+      // Store user's selected refund preference
+      refundPreference: refundPreference && typeof refundPreference === 'object' ? {
+        method: refundPreference.method,
+        upiId: refundPreference.upiId,
+        bankDetails: refundPreference.bankDetails || {}
+      } : undefined
     });
 
     // Add initial status history
@@ -194,6 +211,13 @@ const getAllReturnRequests = async (req, res) => {
     if (warehouseId && warehouseId !== 'all') {
       filter['warehouseInfo.warehouseId'] = warehouseId;
     }
+
+    // Enforce warehouse access for warehouse managers when "all" is selected
+    if ((!warehouseId || warehouseId === 'all') && req.user && req.user.role !== 'admin') {
+      if (Array.isArray(req.assignedWarehouseIds) && req.assignedWarehouseIds.length > 0) {
+        filter['warehouseInfo.warehouseId'] = { $in: req.assignedWarehouseIds };
+      }
+    }
     if (assignedAgent && assignedAgent !== 'all') {
       if (assignedAgent === 'unassigned') {
         filter['assignedPickupAgent.id'] = { $exists: false };
@@ -219,7 +243,9 @@ const getAllReturnRequests = async (req, res) => {
     ]);
 
     // Get return statistics
+    const matchForStats = { ...filter };
     const stats = await Return.aggregate([
+      { $match: matchForStats },
       {
         $group: {
           _id: '$status',
@@ -265,7 +291,7 @@ const getAllReturnRequests = async (req, res) => {
 const getDeliveryAgentReturns = async (req, res) => {
   try {
     const deliveryAgentId = req.user.id;
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, warehouseId } = req.query;
 
     // Build filter for assigned returns
     const filter = {
@@ -274,6 +300,11 @@ const getDeliveryAgentReturns = async (req, res) => {
 
     if (status && status !== 'all') {
       filter.status = status;
+    }
+
+    // Optional warehouse filtering for delivery agents
+    if (warehouseId && warehouseId !== 'all') {
+      filter['warehouseInfo.warehouseId'] = warehouseId;
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -356,6 +387,9 @@ const updateReturnStatus = async (req, res) => {
         console.error('Failed to send pickup OTP:', smsError);
         // Continue with assignment even if SMS fails
       }
+
+      // Log OTP for debugging
+      console.log(`[Return] Pickup OTP for ${returnId}: ${otp}`);
     }
 
     // Add status history and update status
@@ -407,6 +441,10 @@ const updatePickupStatus = async (req, res) => {
         returnRequest.assignedPickupAgent = undefined;
         break;
       case 'picked_up':
+        // Enforce OTP verification for delivery agents
+        if (!returnRequest.pickupOtp?.verified) {
+          return res.status(400).json({ error: 'Pickup OTP must be verified before marking as picked up' });
+        }
         newStatus = 'picked_up';
         statusNote = statusNote || 'Items picked up successfully';
         returnRequest.actualPickupDate = new Date();
@@ -476,6 +514,57 @@ const verifyPickupOtp = async (req, res) => {
   } catch (error) {
     console.error('Error verifying pickup OTP:', error);
     res.status(500).json({ error: 'Failed to verify OTP' });
+  }
+};
+
+// Explicitly resend/generate pickup OTP (Admin/Warehouse)
+const resendPickupOtp = async (req, res) => {
+  try {
+    const { returnId } = req.params;
+    const updatedBy = req.user.id;
+
+    const returnRequest = await Return.findOne({ returnId });
+    if (!returnRequest) {
+      return res.status(404).json({ error: 'Return request not found' });
+    }
+
+    // Allow OTP generation for pickup_assigned status or when pickup agent is assigned
+    if (returnRequest.status !== 'pickup_assigned' && !returnRequest.assignedPickupAgent?.id) {
+      return res.status(400).json({ error: 'Return must be in pickup_assigned status or have a pickup agent assigned' });
+    }
+
+    const otp = generatePickupOtp();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    returnRequest.pickupOtp = {
+      otp,
+      generatedAt: new Date(),
+      expiresAt,
+      verified: false
+    };
+
+    pickupOtpStore[returnId] = {
+      otp,
+      expiresAt,
+      customerId: returnRequest.userId.toString()
+    };
+
+    try {
+      await sendPickupOTP(returnRequest.customerInfo.phone, otp, returnId);
+    } catch (smsError) {
+      console.error('Failed to send pickup OTP:', smsError);
+    }
+
+    console.log(`[Return] Pickup OTP for ${returnId}: ${otp}`);
+
+    // Optional: add history entry for audit
+    returnRequest.addStatusHistory(returnRequest.status, updatedBy, 'Pickup OTP resent');
+    await returnRequest.save();
+
+    res.json({ success: true, message: 'Pickup OTP resent successfully' });
+  } catch (error) {
+    console.error('Error resending pickup OTP:', error);
+    res.status(500).json({ error: 'Failed to resend pickup OTP' });
   }
 };
 
@@ -573,7 +662,8 @@ const processRefund = async (req, res) => {
     // Update refund information
     returnRequest.refundInfo = {
       totalRefundAmount,
-      refundMethod,
+      // Force admin to use customer-selected method when available
+      refundMethod: returnRequest.refundPreference?.method === 'upi' ? 'original_payment' : (refundMethod || 'original_payment'),
       refundStatus: 'processed',
       refundedAt: new Date(),
       refundDetails: refundDetails || {}
@@ -588,6 +678,22 @@ const processRefund = async (req, res) => {
       `Refund processed: ₹${totalRefundAmount} via ${refundMethod} for ${items.length} item(s)`);
 
     await returnRequest.save();
+
+    // Also mark the corresponding order items as refunded
+    const order = await Order.findById(returnRequest.orderObjectId);
+    if (order) {
+      for (const item of items) {
+        const retItem = returnRequest.items.find(ri => ri._id.toString() === item.itemId);
+        if (retItem && retItem.orderItemId) {
+          const orderItem = order.items.id(retItem.orderItemId);
+          if (orderItem) {
+            orderItem.refundStatus = 'refunded';
+            orderItem.refundedAt = new Date();
+          }
+        }
+      }
+      await order.save();
+    }
 
     // TODO: Integrate with payment gateway for actual refund processing
     // For now, we'll just mark it as processed
@@ -683,5 +789,6 @@ module.exports = {
   verifyPickupOtp,
   processRefund,
   getUserReturns,
-  getReturnDetails
+  getReturnDetails,
+  resendPickupOtp
 };

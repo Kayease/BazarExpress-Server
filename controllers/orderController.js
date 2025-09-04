@@ -887,8 +887,7 @@ const assignDeliveryBoy = async (req, res) => {
       assignedBy: req.user.id
     };
 
-    // Add status history for delivery agent assignment
-    order.addStatusHistory(order.status, req.user.id, `Assigned to delivery agent: ${deliveryBoyName}`);
+    // Do not add a status history entry here to avoid duplicating the current status in the timeline
 
     await order.save();
 

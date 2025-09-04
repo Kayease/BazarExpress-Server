@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { isAuth, hasPermission } = require('../middleware/authMiddleware');
+const { isAuth, hasPermission, hasWarehouseAccess } = require('../middleware/authMiddleware');
 const dashboardController = require('../controllers/dashboardController');
 
 // Simple in-memory cache with short TTL per authenticated user/role/warehouse set
@@ -42,6 +42,7 @@ function cacheMiddleware(req, res, next) {
 router.get('/', 
   isAuth,
   hasPermission(['admin', 'product_inventory_management', 'order_warehouse_management', 'marketing_content_manager', 'customer_support_executive', 'report_finance_analyst', 'delivery_boy']),
+  hasWarehouseAccess,
   cacheMiddleware,
   dashboardController.getDashboard
 );

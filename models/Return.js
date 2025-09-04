@@ -12,6 +12,8 @@ const returnItemSchema = new mongoose.Schema({
   variantId: { type: String },
   variantName: { type: String },
   selectedVariant: { type: Object },
+  // Link back to the specific order item id
+  orderItemId: { type: mongoose.Schema.Types.ObjectId, required: true },
   // Return specific fields
   returnReason: { type: String, required: true },
   returnStatus: { 
@@ -108,6 +110,18 @@ const returnSchema = new mongoose.Schema({
       bankAccount: { type: String },
       ifscCode: { type: String },
       accountHolderName: { type: String }
+    }
+  },
+
+  // User's selected refund preference on request
+  refundPreference: {
+    method: { type: String, enum: ['upi', 'bank'] },
+    upiId: { type: String },
+    bankDetails: {
+      accountHolderName: { type: String },
+      accountNumber: { type: String },
+      ifsc: { type: String },
+      bankName: { type: String }
     }
   },
   

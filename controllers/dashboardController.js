@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const Return = require('../models/Return');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Warehouse = require('../models/Warehouse');
@@ -75,10 +76,12 @@ exports.getDashboard = async (req, res) => {
   try {
     const role = req.user.role;
 
-    // Common filters for warehouse-restricted roles
+    // Common filters for warehouse-restricted roles (cast to strings for mixed storage types)
+    const assignedWarehouseIds = Array.isArray(req.assignedWarehouseIds) ? req.assignedWarehouseIds : [];
+    const assignedWarehouseStringIds = assignedWarehouseIds.map((w) => w.toString());
     const warehouseFilter = (field = 'warehouseInfo.warehouseId') => (
-      req.assignedWarehouseIds && req.assignedWarehouseIds.length
-        ? { [field]: { $in: req.assignedWarehouseIds } }
+      assignedWarehouseStringIds && assignedWarehouseStringIds.length
+        ? { [field]: { $in: assignedWarehouseStringIds } }
         : {}
     );
 
@@ -160,6 +163,31 @@ exports.getDashboard = async (req, res) => {
       // Top products for assigned warehouses
       const topProducts = await getTopProducts(match, 5);
 
+      // Return stats for assigned warehouses
+      const [
+        returnsRequested,
+        returnsApproved,
+        returnsPickupAssigned,
+        returnsPickupRejected,
+        returnsPickedUp,
+        returnsReceived,
+        returnsPartiallyRefunded,
+        returnsRefunded,
+        returnsRejected,
+        returnsToday
+      ] = await Promise.all([
+        Return.countDocuments({ ...match, status: 'requested' }),
+        Return.countDocuments({ ...match, status: 'approved' }),
+        Return.countDocuments({ ...match, status: 'pickup_assigned' }),
+        Return.countDocuments({ ...match, status: 'pickup_rejected' }),
+        Return.countDocuments({ ...match, status: 'picked_up' }),
+        Return.countDocuments({ ...match, status: 'received' }),
+        Return.countDocuments({ ...match, status: 'partially_refunded' }).catch(() => 0),
+        Return.countDocuments({ ...match, status: 'refunded' }),
+        Return.countDocuments({ ...match, status: 'rejected' }),
+        Return.countDocuments({ ...match, createdAt: { $gte: today } })
+      ]);
+
       return res.json({
         role,
         cards: {
@@ -176,6 +204,19 @@ exports.getDashboard = async (req, res) => {
         ordersByDay,
         revenueByDay,
         topProducts,
+        returnStats: {
+          requested: returnsRequested,
+          approved: returnsApproved,
+          pickup_assigned: returnsPickupAssigned,
+          pickup_rejected: returnsPickupRejected,
+          picked_up: returnsPickedUp,
+          received: returnsReceived,
+          partially_refunded: returnsPartiallyRefunded,
+          refunded: returnsRefunded,
+          rejected: returnsRejected,
+          today: returnsToday,
+          total: returnsRequested + returnsApproved + returnsPickupAssigned + returnsPickupRejected + returnsPickedUp + returnsReceived + returnsPartiallyRefunded + returnsRefunded + returnsRejected
+        },
       });
     }
 
@@ -406,9 +447,8 @@ exports.getDashboard = async (req, res) => {
       const deliveryBoyId = req.user.id;
       
       // Get assigned warehouses from both middleware and user profile
-      const warehouseIds = req.assignedWarehouseIds || [];
       const userWarehouseIds = req.user.assignedWarehouses ? req.user.assignedWarehouses.map(w => w._id.toString()) : [];
-      const allWarehouseIds = [...new Set([...warehouseIds, ...userWarehouseIds])];
+      const allWarehouseIds = [...new Set([...(assignedWarehouseStringIds || []), ...userWarehouseIds])];
       
       // Get all orders for this delivery boy (excluding cancelled/refunded from performance metrics)
       const [
@@ -517,6 +557,31 @@ exports.getDashboard = async (req, res) => {
         })
       ]);
 
+      // Return stats for this delivery agent (assigned pickups)
+      const [
+        rRequested,
+        rApproved,
+        rPickupAssigned,
+        rPickupRejected,
+        rPickedUp,
+        rReceived,
+        rPartiallyRefunded,
+        rRefunded,
+        rRejected,
+        rTodayAssigned
+      ] = await Promise.all([
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'requested' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'approved' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'pickup_assigned' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'pickup_rejected' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'picked_up' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'received' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'partially_refunded' }).catch(() => 0),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'refunded' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), status: 'rejected' }),
+        Return.countDocuments({ 'assignedPickupAgent.id': deliveryBoyId, ...(allWarehouseIds.length ? { 'warehouseInfo.warehouseId': { $in: allWarehouseIds } } : {}), createdAt: { $gte: today } })
+      ]);
+
       return res.json({
         role,
         cards: {
@@ -535,7 +600,20 @@ exports.getDashboard = async (req, res) => {
           todayRefundedAfterDelivery,
         },
         assignedWarehouses,
-        todayDeliveries
+        todayDeliveries,
+        returnStats: {
+          requested: rRequested,
+          approved: rApproved,
+          pickup_assigned: rPickupAssigned,
+          pickup_rejected: rPickupRejected,
+          picked_up: rPickedUp,
+          received: rReceived,
+          partially_refunded: rPartiallyRefunded,
+          refunded: rRefunded,
+          rejected: rRejected,
+          today: rTodayAssigned,
+          total: rRequested + rApproved + rPickupAssigned + rPickupRejected + rPickedUp + rReceived + rPartiallyRefunded + rRefunded + rRejected
+        }
       });
     }
 
