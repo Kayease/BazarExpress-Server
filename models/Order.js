@@ -41,6 +41,9 @@ const orderSchema = new mongoose.Schema({
   orderId: { type: String, required: true, unique: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   
+  // Invoice Information
+  invoiceNumber: { type: String },
+  
   // Customer Information
   customerInfo: {
     name: { type: String, required: true },

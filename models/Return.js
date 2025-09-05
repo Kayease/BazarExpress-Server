@@ -113,6 +113,9 @@ const returnSchema = new mongoose.Schema({
     }
   },
 
+  // Amount actually refunded to customer (for partial refunds and full refunds)
+  refundedAmount: { type: Number, default: 0 },
+
   // User's selected refund preference on request
   refundPreference: {
     method: { type: String, enum: ['upi', 'bank'] },

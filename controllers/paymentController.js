@@ -5,6 +5,7 @@ const {
   refundPayment 
 } = require('../services/razorpayService');
 const Order = require('../models/Order');
+const InvoiceCounter = require('../models/InvoiceCounter');
 const User = require('../models/User');
 const { updateProductStock, restoreProductStock } = require('../utils/stockManager');
 
@@ -141,9 +142,45 @@ const verifyPayment = async (req, res) => {
     // Create order with payment information
     const orderId = Order.generateOrderId();
     
+    // Generate invoice number using per-day atomic counter
+    let invoiceNumber;
+    try {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const dateKey = `${yyyy}${mm}${dd}`; // YYYYMMDD format for counter doc
+
+      console.log(`[Payment] Generating invoice for dateKey: ${dateKey}`);
+
+      const counterDoc = await InvoiceCounter.findOneAndUpdate(
+        { dateKey },
+        { $inc: { seq: 1 }, $setOnInsert: { dateKey } },
+        { upsert: true, new: true }
+      );
+      
+      console.log(`[Payment] Counter document:`, counterDoc);
+      
+      const seqStr = String(counterDoc.seq).padStart(2, '0');
+      invoiceNumber = `INV-${dateKey}-${seqStr}`;
+      
+      console.log(`[Payment] Generated invoice number: ${invoiceNumber}`);
+    } catch (invoiceError) {
+      console.error('[Payment] Error generating invoice number:', invoiceError);
+      // Don't fail the order creation, but log the error
+      const fallbackDate = new Date();
+      const fallbackYyyy = fallbackDate.getFullYear();
+      const fallbackMm = String(fallbackDate.getMonth() + 1).padStart(2, '0');
+      const fallbackDd = String(fallbackDate.getDate()).padStart(2, '0');
+      const fallbackDateKey = `${fallbackYyyy}${fallbackMm}${fallbackDd}`;
+      invoiceNumber = `INV-${fallbackDateKey}-${Date.now()}`;
+      console.log(`[Payment] Fallback invoice number: ${invoiceNumber}`);
+    }
+    
     const order = new Order({
       orderId,
       userId,
+      invoiceNumber,
       items: orderData.items,
       customerInfo: orderData.customerInfo,
       pricing: orderData.pricing,

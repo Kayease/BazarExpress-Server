@@ -339,7 +339,7 @@ const getDeliveryAgentReturns = async (req, res) => {
 const updateReturnStatus = async (req, res) => {
   try {
     const { returnId } = req.params;
-    const { status, note, assignedPickupAgent } = req.body;
+    const { status, note, assignedPickupAgent, refundedAmount } = req.body;
     const updatedBy = req.user.id;
 
     const returnRequest = await Return.findOne({ returnId });
@@ -404,6 +404,16 @@ const updateReturnStatus = async (req, res) => {
 
       // Log OTP for debugging
       console.log(`[Return] Pickup OTP for ${returnId}: ${otp}`);
+    }
+
+    // Handle refunded amount for partial and full refunds
+    if (status === 'partially_refunded' || status === 'refunded') {
+      if (refundedAmount && refundedAmount > 0) {
+        returnRequest.refundedAmount = refundedAmount;
+      } else if (status === 'refunded') {
+        // For full refunds, if no specific amount provided, use the total refundable amount
+        returnRequest.refundedAmount = returnRequest.refundInfo?.totalRefundAmount || 0;
+      }
     }
 
     // Add status history and update status
@@ -682,6 +692,9 @@ const processRefund = async (req, res) => {
       refundedAt: new Date(),
       refundDetails: refundDetails || {}
     };
+
+    // Set the refunded amount
+    returnRequest.refundedAmount = totalRefundAmount;
 
     // Check if all items are refunded
     const allItemsRefunded = returnRequest.items.every(item => item.returnStatus === 'refunded');

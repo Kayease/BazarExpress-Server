@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const InvoiceCounter = require('../models/InvoiceCounter');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const crypto = require('crypto');
@@ -128,6 +129,41 @@ const createOrder = async (req, res) => {
       status: initialPaymentStatus
     };
 
+    // Generate invoice number using per-day atomic counter
+    let invoiceNumber;
+    try {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const dateKey = `${yyyy}${mm}${dd}`; // YYYYMMDD format for counter doc
+
+      console.log(`Generating invoice for dateKey: ${dateKey}`);
+
+      const counterDoc = await InvoiceCounter.findOneAndUpdate(
+        { dateKey },
+        { $inc: { seq: 1 }, $setOnInsert: { dateKey } },
+        { upsert: true, new: true }
+      );
+      
+      console.log(`Counter document:`, counterDoc);
+      
+      const seqStr = String(counterDoc.seq).padStart(2, '0');
+      invoiceNumber = `INV-${dateKey}-${seqStr}`;
+      
+      console.log(`Generated invoice number: ${invoiceNumber}`);
+    } catch (invoiceError) {
+      console.error('Error generating invoice number:', invoiceError);
+      // Don't fail the order creation, but log the error
+      const fallbackDate = new Date();
+      const fallbackYyyy = fallbackDate.getFullYear();
+      const fallbackMm = String(fallbackDate.getMonth() + 1).padStart(2, '0');
+      const fallbackDd = String(fallbackDate.getDate()).padStart(2, '0');
+      const fallbackDateKey = `${fallbackYyyy}${fallbackMm}${fallbackDd}`;
+      invoiceNumber = `INV-${fallbackDateKey}-${Date.now()}`;
+      console.log(`Fallback invoice number: ${invoiceNumber}`);
+    }
+
     // Create the order
     const order = new Order({
       orderId,
@@ -141,6 +177,7 @@ const createOrder = async (req, res) => {
       paymentInfo: updatedPaymentInfo,
       warehouseInfo,
       notes,
+      invoiceNumber,
       status: 'new'
     });
 
