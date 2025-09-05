@@ -347,6 +347,20 @@ const updateReturnStatus = async (req, res) => {
       return res.status(404).json({ error: 'Return request not found' });
     }
 
+    // Prevent changing from partially_refunded to refunded
+    if (returnRequest.status === 'partially_refunded' && status === 'refunded') {
+      return res.status(400).json({ 
+        error: 'Cannot change status from partially_refunded to refunded. Use the refund processing feature to complete remaining refunds.' 
+      });
+    }
+
+    // Prevent changing from refunded to any other status
+    if (returnRequest.status === 'refunded') {
+      return res.status(400).json({ 
+        error: 'Cannot change status from refunded. This return is already fully processed.' 
+      });
+    }
+
     // Handle pickup agent assignment
     if (status === 'pickup_assigned' && assignedPickupAgent) {
       const deliveryAgent = await User.findById(assignedPickupAgent);
