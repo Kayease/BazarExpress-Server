@@ -21,6 +21,12 @@ router.get('/orders', reportsController.getOrders);
 router.get('/export/csv', reportsController.exportCsv);
 router.get('/export/tally', reportsController.exportTallyXml);
 
+// Return reports
+router.get('/returns/summary', reportsController.getReturnSummary);
+router.get('/returns', reportsController.getReturns);
+router.get('/returns/export/csv', reportsController.exportReturnsCsv);
+router.get('/returns/export/tally', reportsController.exportReturnsTallyXml);
+
 module.exports = router;
 
 

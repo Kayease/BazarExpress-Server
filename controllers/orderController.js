@@ -129,26 +129,26 @@ const createOrder = async (req, res) => {
       status: initialPaymentStatus
     };
 
-    // Generate invoice number using per-day atomic counter
+    // Generate invoice number using continuous atomic counter
     let invoiceNumber;
     try {
       const now = new Date();
       const yyyy = now.getFullYear();
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const dd = String(now.getDate()).padStart(2, '0');
-      const dateKey = `${yyyy}${mm}${dd}`; // YYYYMMDD format for counter doc
+      const dateKey = `${yyyy}${mm}${dd}`; // YYYYMMDD format for invoice number
 
-      console.log(`Generating invoice for dateKey: ${dateKey}`);
+      console.log(`Generating invoice for date: ${dateKey}`);
 
       const counterDoc = await InvoiceCounter.findOneAndUpdate(
-        { dateKey },
-        { $inc: { seq: 1 }, $setOnInsert: { dateKey } },
+        { counterType: 'global' },
+        { $inc: { seq: 1 }, $setOnInsert: { counterType: 'global' } },
         { upsert: true, new: true }
       );
       
       console.log(`Counter document:`, counterDoc);
       
-      const seqStr = String(counterDoc.seq).padStart(2, '0');
+      const seqStr = String(counterDoc.seq).padStart(6, '0'); // Use 6 digits for sequence
       invoiceNumber = `INV-${dateKey}-${seqStr}`;
       
       console.log(`Generated invoice number: ${invoiceNumber}`);
@@ -164,11 +164,39 @@ const createOrder = async (req, res) => {
       console.log(`Fallback invoice number: ${invoiceNumber}`);
     }
 
+    // Process items to extract variant information
+    const processedItems = items.map(item => {
+      const processedItem = { ...item };
+      
+      // Extract variant information from selectedVariant if it exists
+      if (item.selectedVariant) {
+        console.log('Processing variant for item:', item.name, 'selectedVariant:', item.selectedVariant);
+        
+        // If selectedVariant is an object with variant details
+        if (typeof item.selectedVariant === 'object' && item.selectedVariant !== null) {
+          processedItem.variantId = item.selectedVariant.id || item.selectedVariant._id || item.selectedVariant.variantId || item.selectedVariant.sku;
+          processedItem.variantName = item.selectedVariant.name || item.selectedVariant.variantName || item.selectedVariant.displayName || item.selectedVariant.sku;
+          
+          console.log('Extracted variant info:', {
+            variantId: processedItem.variantId,
+            variantName: processedItem.variantName
+          });
+        }
+        // If selectedVariant is a string (variant name)
+        else if (typeof item.selectedVariant === 'string') {
+          processedItem.variantName = item.selectedVariant;
+          console.log('Using string variant name:', processedItem.variantName);
+        }
+      }
+      
+      return processedItem;
+    });
+
     // Create the order
     const order = new Order({
       orderId,
       userId,
-      items,
+      items: processedItems,
       customerInfo,
       pricing,
       promoCode,

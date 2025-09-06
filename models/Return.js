@@ -8,6 +8,14 @@ const returnItemSchema = new mongoose.Schema({
   image: { type: String },
   category: { type: String },
   brand: { type: String },
+  // Tax information from original order item
+  priceIncludesTax: { type: Boolean, default: false },
+  tax: {
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: 'Tax' },
+    name: { type: String },
+    percentage: { type: Number },
+    description: { type: String }
+  },
   // Variant information
   variantId: { type: String },
   variantName: { type: String },

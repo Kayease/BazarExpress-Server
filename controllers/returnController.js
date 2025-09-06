@@ -119,14 +119,34 @@ const createReturnRequest = async (req, res) => {
     // Create return items array
     const returnItems = items.map(returnItem => {
       const orderItem = order.items.find(item => item._id.toString() === returnItem.itemId);
+      
+      // Extract category name properly
+      let categoryName = orderItem.category;
+      if (orderItem.productId && orderItem.productId.category && orderItem.productId.category.name) {
+        categoryName = orderItem.productId.category.name;
+      } else if (typeof orderItem.category === 'object' && orderItem.category.name) {
+        categoryName = orderItem.category.name;
+      }
+      
+      // Extract brand name properly
+      let brandName = orderItem.brand;
+      if (orderItem.productId && orderItem.productId.brand && orderItem.productId.brand.name) {
+        brandName = orderItem.productId.brand.name;
+      } else if (typeof orderItem.brand === 'object' && orderItem.brand.name) {
+        brandName = orderItem.brand.name;
+      }
+      
       return {
         productId: orderItem.productId,
         name: orderItem.name,
         price: orderItem.price,
         quantity: returnItem.quantity || orderItem.quantity,
         image: orderItem.image,
-        category: orderItem.category,
-        brand: orderItem.brand,
+        category: categoryName,
+        brand: brandName,
+        // Include tax information from order item
+        priceIncludesTax: orderItem.priceIncludesTax,
+        tax: orderItem.tax,
         variantId: orderItem.variantId,
         variantName: orderItem.variantName,
         selectedVariant: orderItem.selectedVariant,
@@ -170,7 +190,7 @@ const createReturnRequest = async (req, res) => {
     });
 
     // Add initial status history
-    returnRequest.addStatusHistory('requested', userId, 'Return request created by customer');
+    returnRequest.addStatusHistory('requested', userId, 'Return request created by Customer');
 
     await returnRequest.save();
 
@@ -411,8 +431,16 @@ const updateReturnStatus = async (req, res) => {
       if (refundedAmount && refundedAmount > 0) {
         returnRequest.refundedAmount = refundedAmount;
       } else if (status === 'refunded') {
-        // For full refunds, if no specific amount provided, use the total refundable amount
-        returnRequest.refundedAmount = returnRequest.refundInfo?.totalRefundAmount || 0;
+        // For full refunds, if no specific amount provided, calculate from return items
+        if (returnRequest.refundInfo?.totalRefundAmount && returnRequest.refundInfo.totalRefundAmount > 0) {
+          returnRequest.refundedAmount = returnRequest.refundInfo.totalRefundAmount;
+        } else {
+          // Calculate total refund amount from return items
+          const totalRefundAmount = returnRequest.items.reduce((total, item) => {
+            return total + (item.refundAmount || (item.price * item.quantity));
+          }, 0);
+          returnRequest.refundedAmount = totalRefundAmount;
+        }
       }
     }
 
