@@ -230,7 +230,11 @@ exports.getDashboard = async (req, res) => {
 
       const [productCount, lowStockCount, brandsCount, categoriesCount, assignedWarehouses, outOfStockCount, recentProducts] = await Promise.all([
         Product.countDocuments(prodMatch),
-        Product.countDocuments({ ...prodMatch, $or: [ { stock: { $lte: 10 } }, { stock: { $lte: '$lowStockThreshold' } } ] }).catch(() => Product.countDocuments({ ...prodMatch, stock: { $lte: 10 } })),
+        // Low stock when stock <= lowStockThreshold (fallback to 10 if not set)
+        Product.countDocuments({
+          ...prodMatch,
+          $expr: { $lte: [ "$stock", { $ifNull: [ "$lowStockThreshold", 10 ] } ] }
+        }),
         // Count distinct brands and categories among filtered products
         Product.distinct('brand', prodMatch).then(arr => arr.filter(Boolean).length),
         Product.distinct('category', prodMatch).then(arr => arr.filter(Boolean).length),
@@ -239,8 +243,11 @@ exports.getDashboard = async (req, res) => {
         Product.find(prodMatch).sort({ createdAt: -1 }).limit(5).select('name stock warehouse createdAt').populate('warehouse', 'name'),
       ]);
 
-      const lowStockProducts = await Product.find({ ...prodMatch, stock: { $lte: 10 } })
-        .select('name stock warehouse')
+      const lowStockProducts = await Product.find({
+          ...prodMatch,
+          $expr: { $lte: [ "$stock", { $ifNull: [ "$lowStockThreshold", 10 ] } ] }
+        })
+        .select('name stock warehouse lowStockThreshold')
         .populate('warehouse', 'name')
         .limit(10);
 
