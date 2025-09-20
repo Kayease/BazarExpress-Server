@@ -317,6 +317,56 @@ const getCustomers = async (req, res) => {
                 }
               }
             }
+          },
+          orderStatuses: {
+            new: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.status', 'new'] }
+                }
+              }
+            },
+            processing: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.status', 'processing'] }
+                }
+              }
+            },
+            shipped: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.status', 'shipped'] }
+                }
+              }
+            },
+            delivered: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.status', 'delivered'] }
+                }
+              }
+            },
+            cancelled: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.status', 'cancelled'] }
+                }
+              }
+            },
+            refunded: {
+              $size: {
+                $filter: {
+                  input: '$orders',
+                  cond: { $eq: ['$$this.status', 'refunded'] }
+                }
+              }
+            }
           }
         }
       },
@@ -344,7 +394,8 @@ const getCustomers = async (req, res) => {
           averageOrderValue: 1,
           lastOrderDate: 1,
           firstOrderDate: 1,
-          customerSegment: 1
+          customerSegment: 1,
+          orderStatuses: 1
         }
       }
     ]);
