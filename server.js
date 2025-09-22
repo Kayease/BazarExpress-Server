@@ -34,6 +34,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const returnRoutes = require("./routes/returnRoutes");
 const reportsRoutes = require("./routes/reportsRoutes");
 const customerAnalyticsRoutes = require("./routes/customerAnalyticsRoutes");
+const chatbotRoutes = require("./routes/chatbotRoutes");
 const noticeController = require("./controllers/noticeController");
 
 // Import abandoned cart middleware
@@ -100,6 +101,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/admin/customer-analytics", customerAnalyticsRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/location", require("./routes/locationRoutes"));
 app.use("/api/setup", require("./routes/setup"));
 // Stock SSE/availability routes
