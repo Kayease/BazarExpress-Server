@@ -9,9 +9,11 @@ router.get('/qas', ctrl.listQAs)
 router.post('/qas', ctrl.createQA)
 router.delete('/qas/:id', ctrl.deleteQA)
 
-router.get('/docs', ctrl.listDocs)
-router.post('/docs', ctrl.createDoc)
-router.delete('/docs/:id', ctrl.deleteDoc)
+// Categories
+router.get('/categories', ctrl.listCategories)
+router.post('/categories', ctrl.createCategory)
+router.put('/categories/:id', ctrl.updateCategory)
+router.delete('/categories/:id', ctrl.deleteCategory)
 
 module.exports = router
 

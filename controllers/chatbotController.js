@@ -1,6 +1,6 @@
 const ChatbotSetting = require('../models/ChatbotSetting')
 const ChatbotQA = require('../models/ChatbotQA')
-const ChatbotDoc = require('../models/ChatbotDoc')
+const ChatbotCategory = require('../models/ChatbotCategory')
 
 exports.getSettings = async (req, res, next) => {
   try {
@@ -30,9 +30,10 @@ exports.listQAs = async (req, res, next) => {
 
 exports.createQA = async (req, res, next) => {
   try {
-    const { question, answer } = req.body || {}
+    const { question, answer, categoryId } = req.body || {}
     if (!question || !answer) return res.status(400).json({ error: 'Question and answer are required' })
-    const item = await ChatbotQA.create({ question, answer })
+    if (!categoryId) return res.status(400).json({ error: 'categoryId is required' })
+    const item = await ChatbotQA.create({ question, answer, categoryId })
     res.json(item)
   } catch (e) { next(e) }
 }
@@ -45,26 +46,44 @@ exports.deleteQA = async (req, res, next) => {
   } catch (e) { next(e) }
 }
 
-exports.listDocs = async (req, res, next) => {
+// FAQ Documents endpoints removed
+
+// ===== Categories =====
+exports.listCategories = async (req, res, next) => {
   try {
-    const items = await ChatbotDoc.find({}).sort({ createdAt: -1 })
+    const items = await ChatbotCategory.find({}).sort({ name: 1 })
     res.json(items)
   } catch (e) { next(e) }
 }
 
-exports.createDoc = async (req, res, next) => {
+exports.createCategory = async (req, res, next) => {
   try {
-    const { filename, content, url } = req.body || {}
-    if (!filename) return res.status(400).json({ error: 'filename is required' })
-    const item = await ChatbotDoc.create({ filename, content: content || '', url })
+    const { name } = req.body || {}
+    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' })
+    const item = await ChatbotCategory.create({ name: name.trim() })
     res.json(item)
+  } catch (e) {
+    if (e && e.code === 11000) return res.status(409).json({ error: 'Category already exists' })
+    next(e)
+  }
+}
+
+exports.updateCategory = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { name } = req.body || {}
+    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' })
+    const updated = await ChatbotCategory.findByIdAndUpdate(id, { name: name.trim() }, { new: true })
+    res.json(updated)
   } catch (e) { next(e) }
 }
 
-exports.deleteDoc = async (req, res, next) => {
+exports.deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params
-    await ChatbotDoc.findByIdAndDelete(id)
+    await ChatbotCategory.findByIdAndDelete(id)
+    // Optionally unset categoryId from QAs referencing this category
+    await ChatbotQA.updateMany({ categoryId: id }, { $unset: { categoryId: 1 } })
     res.json({ success: true })
   } catch (e) { next(e) }
 }
